@@ -8,6 +8,8 @@ import https from 'https';
 import morgan from 'morgan';
 import path from 'path';
 import tls, { SecureContext, SecureContextOptions } from 'tls';
+import { CertMonitorFactory, CertMonitorOptions } from './LetsEncrypt/CertMonitorFactory';
+import { LeDomainsProvider } from './LetsEncrypt/DockerDomainsProvider';
 import { AggregatedProxyRouter } from './Proxy/AggregatedProxyRouter';
 import { DockerMonitor, createDockerMonitor } from './Proxy/DockerMonitor';
 import { DockerProxyRouter } from './Proxy/DockerProxyRouter';
@@ -28,6 +30,54 @@ const dockerMonitor: DockerMonitor = createDockerMonitor();
 // Setup Docker Router
 const dockerProxyRouter: DockerProxyRouter = new DockerProxyRouter();
 dockerProxyRouter.bind(dockerMonitor)
+
+function getCertOptions() {
+	const leBaseDir: string = '/tmp/letsencrypt';
+	if (!fs.existsSync(leBaseDir)) {
+		mkdirSync(leBaseDir);
+	}
+
+	const certificateDir: string = path.resolve(leBaseDir, 'certs');
+	if (!fs.existsSync(certificateDir)) {
+		mkdirSync(certificateDir);
+	}
+
+	const accountsDir: string = path.resolve(leBaseDir, 'accounts');
+	if (!fs.existsSync(accountsDir)) {
+		mkdirSync(accountsDir);
+	}
+
+
+	const certOptions: CertMonitorOptions = {
+		accountKeyPath: accountsDir,
+		keyFilePattern: path.resolve(certificateDir, '%s.key'),
+		certFilePattern: path.resolve(certificateDir, '%s.crt'),
+		caFilePattern: path.resolve(certificateDir, '%s.chain.pem'),
+	};
+	return certOptions;
+}
+
+// Setup LetsEncrypt
+const certOptions: CertMonitorOptions = getCertOptions();
+
+const staging: boolean = true;
+const certMonitor: CertMonitorI = (new CertMonitorFactory()).create(certOptions, staging, app);
+certMonitor.on(CertMonitorEvent.ERROR, (e) => {
+	console.error(e);
+});
+certMonitor.on(CertMonitorEvent.SKIPPED, (domain: string) => {
+	console.log('Skipped', domain);
+});
+certMonitor.on(CertMonitorEvent.GENERATED, (domain: string) => {
+	console.log('Generated', domain);
+});
+
+
+certMonitor.start(1440);
+dockerMonitor.onChange((dockerInspects: DockerInspectI[]) => {
+	const leDomains: Record<string, string> = (new LeDomainsProvider()).getDomains(dockerInspects);
+	certMonitor.set(leDomains);
+});
 
 // Create handler to allow domain (CName) specific certificates
 const getCertificate = async (hostname, callback) => {
