@@ -79,6 +79,8 @@ app.use((err, req, res, next) => {
 
 // Request logging
 app.use(morgan('combined'));
+// Setup WAF
+app.use(middleware);
 
 app.use(proxyMiddleware);
 
