@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 // TODO: remove internal dependencies
-import type { CertMonitorI } from "@jbuncle/letsencrypt-js";
+import { CertMonitorEvent, CertMonitorI } from "@jbuncle/letsencrypt-js";
 import { BasicCertMonitorFactory } from "@jbuncle/letsencrypt-js";
 import express from 'express';
 import { ExpressChallengeHandler } from "./ExpressChallengeHandler";
@@ -27,12 +27,26 @@ export class CertMonitorFactory {
         const { certFilePattern, keyFilePattern, caFilePattern, accountKeyPath } = options;
         const challengeHandler: ExpressChallengeHandler = new ExpressChallengeHandler();
         challengeHandler.bind(express);
-        return new BasicCertMonitorFactory(
+        const certMonitor = new BasicCertMonitorFactory(
             [challengeHandler],
             certFilePattern,
             keyFilePattern,
             caFilePattern,
             accountKeyPath
         ).create(staging);
+
+
+        // TODO: proper logging
+        certMonitor.on(CertMonitorEvent.ERROR, (e) => {
+            console.error(e);
+        });
+        certMonitor.on(CertMonitorEvent.SKIPPED, (domain: string) => {
+            console.log('Skipped', domain);
+        });
+        certMonitor.on(CertMonitorEvent.GENERATED, (domain: string) => {
+            console.log('Generated', domain);
+        });
+
+        return certMonitor;
     }
 }

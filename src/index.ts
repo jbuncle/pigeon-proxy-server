@@ -1,22 +1,20 @@
 import { DockerInspectI } from '@jbuncle/docker-api-js';
-import { CertMonitorEvent, CertMonitorI } from '@jbuncle/letsencrypt-js';
+import { CertMonitorI } from '@jbuncle/letsencrypt-js';
 import express from 'express';
-import fs, { mkdirSync } from 'fs';
 import http from 'http';
-import { createProxyMiddleware, Filter, Options } from 'http-proxy-middleware';
-import https from 'https';
+import { Filter, Options, createProxyMiddleware } from 'http-proxy-middleware';
+import https, { ServerOptions } from 'https';
 import morgan from 'morgan';
-import path from 'path';
-import tls, { SecureContext, SecureContextOptions } from 'tls';
 import { CertMonitorFactory, CertMonitorOptions } from './LetsEncrypt/CertMonitorFactory';
 import { LeDomainsProvider } from './LetsEncrypt/DockerDomainsProvider';
+import { LetsEncryptUtils } from './LetsEncrypt/LetsEncryptUtil';
+import { middleware } from './ModSecurity/ModSecurityLoader';
 import { AggregatedProxyRouter } from './Proxy/AggregatedProxyRouter';
 import { DockerMonitor, createDockerMonitor } from './Proxy/DockerMonitor';
 import { DockerProxyRouter } from './Proxy/DockerProxyRouter';
 import { ProxyRouter } from './Proxy/ProxyRouter';
 import { ProxyRouterI } from './Proxy/ProxyRouterI';
-import { format } from "util";
-import { middleware } from './ModSecurity/ModSecurityLoader';
+import { SNICallbackFactory } from './Utils/SNICallbackFactory';
 
 
 const app: express.Application = express();
@@ -31,81 +29,22 @@ const dockerMonitor: DockerMonitor = createDockerMonitor();
 const dockerProxyRouter: DockerProxyRouter = new DockerProxyRouter();
 dockerProxyRouter.bind(dockerMonitor)
 
-function getCertOptions() {
-	const leBaseDir: string = '/tmp/letsencrypt';
-	if (!fs.existsSync(leBaseDir)) {
-		mkdirSync(leBaseDir);
-	}
-
-	const certificateDir: string = path.resolve(leBaseDir, 'certs');
-	if (!fs.existsSync(certificateDir)) {
-		mkdirSync(certificateDir);
-	}
-
-	const accountsDir: string = path.resolve(leBaseDir, 'accounts');
-	if (!fs.existsSync(accountsDir)) {
-		mkdirSync(accountsDir);
-	}
-
-
-	const certOptions: CertMonitorOptions = {
-		accountKeyPath: accountsDir,
-		keyFilePattern: path.resolve(certificateDir, '%s.key'),
-		certFilePattern: path.resolve(certificateDir, '%s.crt'),
-		caFilePattern: path.resolve(certificateDir, '%s.chain.pem'),
-	};
-	return certOptions;
-}
 
 // Setup LetsEncrypt
-const certOptions: CertMonitorOptions = getCertOptions();
-
+const certOptions: CertMonitorOptions = (new LetsEncryptUtils('/tmp/letsencrypt')).getCertOptions();
+// TODO: check environment
 const staging: boolean = true;
 const certMonitor: CertMonitorI = (new CertMonitorFactory()).create(certOptions, staging, app);
-certMonitor.on(CertMonitorEvent.ERROR, (e) => {
-	console.error(e);
-});
-certMonitor.on(CertMonitorEvent.SKIPPED, (domain: string) => {
-	console.log('Skipped', domain);
-});
-certMonitor.on(CertMonitorEvent.GENERATED, (domain: string) => {
-	console.log('Generated', domain);
-});
-
-
-certMonitor.start(1440);
+// Watch for container changes and update
 dockerMonitor.onChange((dockerInspects: DockerInspectI[]) => {
 	const leDomains: Record<string, string> = (new LeDomainsProvider()).getDomains(dockerInspects);
 	certMonitor.set(leDomains);
 });
 
-// Create handler to allow domain (CName) specific certificates
-const getCertificate = async (hostname, callback) => {
-	// TODO: default cert?
-
-	// TODO: check inputs including domain/CName
-
-	const keyPath: string = format(certOptions.keyFilePattern, path.basename(hostname));
-	const certPath: string = format(certOptions.certFilePattern, path.basename(hostname));
-
-	// Generate certificate object dynamically based on the hostname
-	try {
-		const [key, cert] = await Promise.all([
-			fs.promises.readFile(keyPath),
-			fs.promises.readFile(certPath)
-		]);
-
-		console.log('fetching', keyPath, certPath);
-		const certificate: SecureContextOptions = {
-			key,
-			cert
-		};
-		const secureContext: SecureContext = tls.createSecureContext(certificate);
-		callback(null, secureContext);
-	} catch (e) {
-		console.error(e);
-		callback(e, null);
-	}
+const sniCallback = new SNICallbackFactory(certOptions.keyFilePattern, certOptions.certFilePattern).create()
+const httpsServerOptions: ServerOptions = {
+	// Define callback to handle certificate requests
+	SNICallback: sniCallback
 };
 
 // Setup the reverse proxy
@@ -137,6 +76,7 @@ app.use((err, req, res, next) => {
 		console.error(e);
 	}
 });
+
 // Request logging
 app.use(morgan('combined'));
 
@@ -144,12 +84,12 @@ app.use(proxyMiddleware);
 
 // Start up everything
 
+// Start monitoring letsencrypt certs
+certMonitor.start(1440);
+
 // Start monitoring docker containers
 dockerMonitor.start();
 
 // Start the web servers
-https.createServer({
-	// Define callback to handle certificate requests
-	SNICallback: getCertificate
-}, app).listen(8443);
+https.createServer(httpsServerOptions, app).listen(8443);
 http.createServer(app).listen(8080);
