@@ -1,3 +1,5 @@
+import { DockerInspectI } from '@jbuncle/docker-api-js';
+import { CertMonitorEvent, CertMonitorI } from '@jbuncle/letsencrypt-js';
 import express from 'express';
 import fs, { mkdirSync } from 'fs';
 import http from 'http';
@@ -8,6 +10,7 @@ import path from 'path';
 import tls, { SecureContext, SecureContextOptions } from 'tls';
 import { AggregatedProxyRouter } from './Proxy/AggregatedProxyRouter';
 import { DockerMonitor, createDockerMonitor } from './Proxy/DockerMonitor';
+import { DockerProxyRouter } from './Proxy/DockerProxyRouter';
 import { ProxyRouter } from './Proxy/ProxyRouter';
 import { ProxyRouterI } from './Proxy/ProxyRouterI';
 import { format } from "util";
@@ -19,6 +22,12 @@ const app: express.Application = express();
 // Setup proxy
 const fixedProxyRouter: ProxyRouter = new ProxyRouter();
 fixedProxyRouter.addRoute('example.com', 'http://localhost:3000');
+
+const dockerMonitor: DockerMonitor = createDockerMonitor();
+
+// Setup Docker Router
+const dockerProxyRouter: DockerProxyRouter = new DockerProxyRouter();
+dockerProxyRouter.bind(dockerMonitor)
 
 // Create handler to allow domain (CName) specific certificates
 const getCertificate = async (hostname, callback) => {
@@ -50,6 +59,7 @@ const getCertificate = async (hostname, callback) => {
 };
 
 // Setup the reverse proxy
+const proxyRouter: ProxyRouterI = new AggregatedProxyRouter([fixedProxyRouter, dockerProxyRouter]);
 const proxyMiddleware = createProxyMiddleware({
 	router: async (req: express.Request): Promise<string | undefined> => {
 		const result: string = await proxyRouter.router(req)
@@ -81,6 +91,11 @@ app.use((err, req, res, next) => {
 app.use(morgan('combined'));
 
 app.use(proxyMiddleware);
+
+// Start up everything
+
+// Start monitoring docker containers
+dockerMonitor.start();
 
 // Start the web servers
 https.createServer({
