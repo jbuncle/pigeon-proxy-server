@@ -10,28 +10,30 @@ const possibleModSecurityDirs = [
 
 const libraryDirs = [
     'lib/',
+    'lib/x86_64-linux-gnu',
+    'lib/',
     'lib64/',
     './',
 ];
 
-function findLibrary(modSecDirs: string) {
+function findLibrary(modSecDirs: string): string | undefined {
     for (const library of libraryDirs) {
         const libPath: string = path.join(modSecDirs, library, 'libmodsecurity.so');
+        console.log('Checking', libPath)
         if (existsSync(libPath)) {
             return libPath;
         }
     }
-    return null;
+    return undefined;
 }
 
 export function findModSec(): string | undefined {
-    let lib = undefined;
 
     for (const modSecDir of possibleModSecurityDirs) {
-        if (!lib) {
-            lib = findLibrary(modSecDir);
+        const lib = findLibrary(modSecDir);
+        if (lib !== undefined) {
+            return lib;
         }
     }
-
-    return lib;
+    return undefined;
 }

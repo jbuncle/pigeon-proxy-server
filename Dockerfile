@@ -36,5 +36,4 @@ COPY . .
 RUN npm rebuild
 CMD npm run start
 
-VOLUME [ "/tmp/letsencrypt" ]
-# CMD [ "node", "/app/dist/index.js" ]
+VOLUME [ "/etc/letsencrypt" ]

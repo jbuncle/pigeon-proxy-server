@@ -8,15 +8,32 @@ import morgan from 'morgan';
 import { CertMonitorFactory, CertMonitorOptions } from './LetsEncrypt/CertMonitorFactory';
 import { LeDomainsProvider } from './LetsEncrypt/DockerDomainsProvider';
 import { LetsEncryptUtils } from './LetsEncrypt/LetsEncryptUtil';
-import { middleware } from './ModSecurity/ModSecurityLoader';
 import { AggregatedProxyRouter } from './Proxy/AggregatedProxyRouter';
 import { DockerMonitor, createDockerMonitor } from './Proxy/DockerMonitor';
 import { DockerProxyRouter } from './Proxy/DockerProxyRouter';
 import { ProxyRouter } from './Proxy/ProxyRouter';
 import { ProxyRouterI } from './Proxy/ProxyRouterI';
 import { SNICallbackFactory } from './Utils/SNICallbackFactory';
+import { ModSecurityLoader } from './ModSecurity/ModSecurityLoader';
+import { findModSec } from './ModSecurity/ModSecurityUtil';
 
 
+
+function getArgs(): Record<string, string> {
+	// Get the arguments passed to the script
+	const args = process.argv.slice(2);
+
+	// Parse the arguments
+	const options = {};
+	args.forEach((arg) => {
+		const [key, value] = arg.split('=');
+		options[key.slice(2)] = value;
+	});
+
+	return options;
+}
+
+const args: Record<string, string> = getArgs();
 const app: express.Application = express();
 
 // Setup proxy
@@ -29,11 +46,18 @@ const dockerMonitor: DockerMonitor = createDockerMonitor();
 const dockerProxyRouter: DockerProxyRouter = new DockerProxyRouter();
 dockerProxyRouter.bind(dockerMonitor)
 
+const staging: boolean = (args.stage) ? args.stage !== 'production' : true;
+const modSecurityLib: string | undefined = (args.modSecurityLib) ? args.modSecurityLib : findModSec();
+const modSecurityRules: string = (args.modSecurityRules) ? args.modSecurityRules : '/usr/local/modsecurity-rules/main.conf';
+
+const leCertDir: string =  (args.leCertDir) ? args.leCertDir : '/etc/letsencrypt/live';
+const leAccountsDir: string = (args.leAccountsDir) ? args.leAccountsDir : '/etc/letsencrypt/accounts';
 
 // Setup LetsEncrypt
-const certOptions: CertMonitorOptions = (new LetsEncryptUtils('/tmp/letsencrypt')).getCertOptions();
-// TODO: check environment
-const staging: boolean = true;
+const certOptions: CertMonitorOptions = new LetsEncryptUtils(leCertDir, leAccountsDir).getCertOptions();
+// TODO: check lib and rules exists/accessible
+const modSecurityMiddleware = new ModSecurityLoader(modSecurityLib, modSecurityRules).createMiddleware();
+
 const certMonitor: CertMonitorI = (new CertMonitorFactory()).create(certOptions, staging, app);
 // Watch for container changes and update
 dockerMonitor.onChange((dockerInspects: DockerInspectI[]) => {
@@ -80,9 +104,13 @@ app.use((err, req, res, next) => {
 // Request logging
 app.use(morgan('combined'));
 // Setup WAF
-app.use(middleware);
+app.use(modSecurityMiddleware);
 
 app.use(proxyMiddleware);
+
+// Setup caching
+// TODO
+
 
 // Start up everything
 
