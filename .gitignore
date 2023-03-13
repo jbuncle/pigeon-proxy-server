@@ -1,0 +1,6 @@
+/node_modules
+/nbproject/private
+/dist
+/package-lock.json
+/generated
+/app/nginx.tmpl.orig
