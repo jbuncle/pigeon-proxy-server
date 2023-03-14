@@ -1,6 +1,4 @@
-import { DockerContainerI, DockerContainers, DockerEventOptionsI, DockerEvents, DockerInspect, DockerInspectI, DockerSocket } from "@jbuncle/docker-api-js";
-import { ProxyRouter } from "./ProxyRouter";
-import { ProxyRouterI } from "./ProxyRouterI";
+import { DockerInspectI } from "@jbuncle/docker-api-js";
 import { AbstractProxyRouter } from "./AbstractProxyRouter";
 import { DockerMonitor } from "./DockerMonitor";
 

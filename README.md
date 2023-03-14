@@ -6,15 +6,14 @@ Reverse Proxy Server is an all-in-one solution for proxying requests to differen
 
 ### Current
 
-- Docker Integration: The server automatically routes requests to running containers based on `VIRTUAL_HOST` and `VIRTUAL_PORT` labels on the containers.
-- LetsEncrypt: LetsEncrypt certificates can be automatically generated and renewed for Docker containers using `LETSENCRYPT_HOST` and `LETSENCRYPT_EMAIL` labels on running containers.
-- ModSecurity: The server integrates with libModSecurity to check and reject malicious requests.
+- **Docker Integration**: The server automatically routes requests to running containers based on `VIRTUAL_HOST` and `VIRTUAL_PORT` labels on the containers.
+- **LetsEncrypt**: LetsEncrypt certificates can be automatically generated and renewed for Docker containers using `LETSENCRYPT_HOST` and `LETSENCRYPT_EMAIL` labels on running containers.
+- **ModSecurity**: The server integrates with libModSecurity to check and reject malicious requests.
 
 ### TODO
 
 - FileSystem caching of static content.
 - Automatically generate LetsEncrypt certificates for all domains (not just Docker).
-- Allow configuration file to define static routes (i.e. routes not defined by Docker containers).
 
 ## Running
 
@@ -39,5 +38,6 @@ The following options are available when running the server:
 | modSecurityRules | /usr/local/modsecurity-rules/main.conf | Path to the ModSecurity rules file.                                                    |
 | leAccountsDir    | /etc/letsencrypt/accounts              | The directory where LetsEncrypt accounts are stored.                                   |
 | leCertDir        | /etc/letsencrypt/live                  | The directory where LetsEncrypt certificates are stored.                               |
+| fixedRoutesFile  |                                        | (Optional) Path to a JSON file defining static/fixed routes                            |
 
 Note: This project is still in development.
