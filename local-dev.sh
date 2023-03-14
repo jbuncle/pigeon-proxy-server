@@ -3,7 +3,7 @@
 set -e
 echo $(pwd)
 
-TAG=jbuncle/reverse-proxy-server
+TAG=jbuncle/pigeon-proxy-server
 
 
 push() {

@@ -1,6 +1,8 @@
-# Reverse Proxy Server
+# Pigeon Proxy Server
 
-Reverse Proxy Server is an all-in-one solution that efficiently proxies requests to multiple targets with built-in integrations for Docker, ModSecurity, and LetsEncrypt. 
+![Pigeon](./resources/delivery-pigeon-small.png)
+
+Pigeon Proxy Server is an all-in-one solution that efficiently proxies requests to multiple targets with built-in integrations for Docker, ModSecurity, and LetsEncrypt. 
 
 Written in TypeScript, it uses the Express.js server and add middleware (both pre-existing and custom) to create the complete solution.
 
