@@ -1,4 +1,9 @@
-export class InterventionError extends Error {
+import { ModSecurityError } from "./ModSecurityError";
+
+/**
+ * Represents a ModSecurity Intervention error.
+ */
+export class InterventionError extends ModSecurityError {
 
 
     public static fromIntervention(intervention) {

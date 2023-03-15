@@ -1,135 +1,306 @@
-import * as ffi from 'ffi-napi';
+import { Library } from 'ffi-napi';
 import * as ref from 'ref-napi';
+import { isNull, refType, types } from 'ref-napi';
 import StructDi from 'ref-struct-di';
+import { ModSecurityError } from './ModSecurityError';
 
-const struct = StructDi(ref);
-export const ModSecurityIntervention = struct({
-    status: ref.types.int,
-    pause: ref.types.int,
-    url: ref.types.CString,
-    log: ref.types.CString,
-    disruptive: ref.types.int,
+export const ModSecurityIntervention = StructDi(ref)({
+    status: types.int,
+    pause: types.int,
+    url: types.CString,
+    log: types.CString,
+    disruptive: types.int,
 });
 
-// Define the ModSecurity C API types
-const ModSecurityPtr = ref.refType('void');
-const RulesSetPtr = ref.refType('void');
-const TransactionPtr = ref.refType('void');
-const voidPtr = ffi.types.void;
+// Define the ModSecurity C API Pointer types
+const ModSecurityPtr = refType('void');
+const RulesSetPtr = refType('void');
+const TransactionPtr = refType('void');
+const ErrorPtr = refType('void');
+const voidPtr = refType('void');
+const ModSecurityInterventionPtr = refType(ModSecurityIntervention);
 
 
 /**
- * Wrapper for libModSecurity library.
+   * Define C Library functions.
+   */
+const BINDINGS = {
+    msc_init: [ModSecurityPtr, []],
+    msc_create_rules_set: [RulesSetPtr, []],
+    msc_rules_add_file: [types.int, [RulesSetPtr, types.CString, ErrorPtr],],
+    msc_new_transaction: [TransactionPtr, [ModSecurityPtr, RulesSetPtr]],
+    msc_process_connection: [types.int, [TransactionPtr, types.CString, types.int, types.CString, types.int]],
+    msc_process_uri: [types.int, [TransactionPtr, types.CString, types.CString, types.CString,]],
+    msc_process_request_headers: [types.int, [TransactionPtr]],
+    msc_process_response_headers: [types.int, [TransactionPtr]],
+    msc_process_request_body: [types.int, [TransactionPtr]],
+    msc_process_response_body: [types.int, [TransactionPtr]],
+    msc_append_request_body: [types.int, [TransactionPtr, types.CString, types.size_t]],
+    msc_append_response_body: [types.int, [TransactionPtr, types.CString, types.size_t]],
+    msc_add_request_header: [types.int, [TransactionPtr, types.CString, types.CString]],
+    msc_add_response_header: [types.int, [TransactionPtr, types.CString, types.CString]],
+    msc_transaction_cleanup: [voidPtr, [TransactionPtr]],
+    msc_process_logging: [types.int, [TransactionPtr]],
+    msc_rules_dump: [types.int, [RulesSetPtr]],
+    msc_intervention: [types.int, [TransactionPtr, ModSecurityInterventionPtr]],
+};
+/**
+ * Wrapper class for the libModSecurity library.
+ * 
+ * Defines a subset of C library bindings for libModSecurity.
+ * 
+ * For reference see https://github.com/SpiderLabs/ModSecurity
  */
 export class ModSecurity {
 
-    private readonly modsecurity;
+    /**
+     * Bindings to the native libModSecurity C library.
+     */
+    private readonly modSecurityLibrary: Record<keyof typeof BINDINGS, (...args: any[]) => any>;
 
-    public constructor(lib: string) {
-        console.log('Setting bindings for modsecurity');
-
-        this.modsecurity = ffi.Library(lib, {
-            msc_init: [ModSecurityPtr, []],
-            msc_create_rules_set: [RulesSetPtr, []],
-            msc_rules_add_file: [ffi.types.int, ["pointer", "string", "pointer"],],
-            msc_new_transaction: [TransactionPtr, ['pointer', 'pointer']],
-            msc_process_connection: [ffi.types.int, ['pointer', 'string']],
-            msc_process_uri: [ffi.types.int, [TransactionPtr, 'string', 'string', 'string']],
-            msc_process_request_headers: [ffi.types.int, [TransactionPtr]],
-            msc_process_response_headers: [ffi.types.int, [TransactionPtr]],
-            msc_process_request_body: [ffi.types.int, [TransactionPtr]],
-            msc_process_response_body: [ffi.types.int, [TransactionPtr]],
-            msc_append_request_body: [ffi.types.int, [TransactionPtr, 'string', 'size_t']],
-            msc_append_response_body: [ffi.types.int, [TransactionPtr, 'string', 'size_t']],
-            msc_add_request_header: [ffi.types.int, [TransactionPtr, ffi.types.CString, ffi.types.CString]],
-            msc_add_response_header: [ffi.types.int, [TransactionPtr, ffi.types.CString, ffi.types.CString]],
-            msc_transaction_cleanup: [voidPtr, [TransactionPtr]],
-            msc_process_logging: [ffi.types.int, [TransactionPtr]],
-            msc_rules_dump: [ffi.types.int, [RulesSetPtr]],
-            msc_intervention: [ref.types.int, [TransactionPtr, ref.refType(ModSecurityIntervention)]],
-        });
+    public constructor(modSecurityLibraryPath: string) {
+        // Initialise bindings
+        this.modSecurityLibrary = Library(modSecurityLibraryPath, BINDINGS);
     }
 
-    public init() {
-        const modsec = this.modsecurity.msc_init();
-        if (modsec.isNull()) {
-            throw new Error('Failed to initialize ModSecurity');
+    /**
+     * Initialises ModSecurity C API.
+     *
+     * @returns ModSecurity instance pointer.
+     */
+    public init(): Buffer {
+        const modSec: Buffer = this.modSecurityLibrary.msc_init();
+        if (isNull(modSec)) {
+            throw new ModSecurityError('Failed to initialize ModSecurity');
         }
-        return modsec;
+        return modSec;
     }
 
-    public createRulesSet() {
-        const ruleSet = this.modsecurity.msc_create_rules_set();
-        if (ruleSet.isNull()) {
-            throw new Error('Failed to create rules set');
+    /**
+     * Create empty RuleSet.
+     *
+     * @returns RuleSet instance pointer.
+     */
+    public createRulesSet(): Buffer {
+        const ruleSetPtr: Buffer = this.modSecurityLibrary.msc_create_rules_set();
+        if (isNull(ruleSetPtr)) {
+            throw new ModSecurityError('Failed to create rules set');
         }
-        return ruleSet;
+        return ruleSetPtr;
     }
 
-    public rulesAddFile(ruleSet, rulesFile) {
-        const errorPtr = ref.alloc(ref.types.CString);
+    /**
+     * Add rules from file to the RuleSet.
+     *
+     * @param ruleSetPtr The RuleSet pointer.
+     * @param rulesFile Path to rules conf file, to add to RuleSet.
+     *
+     * @returns number of rules added.
+     */
+    public rulesAddFile(ruleSetPtr: Buffer, rulesFile: string): number {
+        const errorPtr = ref.alloc(types.CString);
         // Number of rules loaded, -1 if failed.
-        const numberOfRules = this.modsecurity.msc_rules_add_file(ruleSet, rulesFile, errorPtr);
+        const numberOfRules = this.modSecurityLibrary.msc_rules_add_file(ruleSetPtr, rulesFile, errorPtr);
         if (numberOfRules < 0) {
             const error = ref.get(errorPtr);
-            throw new Error(error);
+            throw new ModSecurityError(error);
         }
         return numberOfRules;
     }
 
-    public newTransaction(modsec, ruleSet) {
-        return this.modsecurity.msc_new_transaction(modsec, ruleSet);
+    /**
+     * Create a new "transaction".
+     * 
+     * "The transaction is the unit that will be used the inspect every request. It holds 
+     * all the information for a given request."
+     *
+     * @param modSecPtr The ModSecurity pointer (from init())
+     * @param ruleSetPtr The RuleSet pointer (from createRulesSet())
+     *
+     * @returns Transaction pointer
+     */
+    public newTransaction(modSecPtr: Buffer, ruleSetPtr: Buffer): Buffer {
+        const transactionPtr: Buffer = this.modSecurityLibrary.msc_new_transaction(modSecPtr, ruleSetPtr);
+        if (isNull(transactionPtr)) {
+            throw new Error('Failed to create transaction');
+        }
+        return transactionPtr;
     }
 
-    public processConnection(transaction, ip: string) {
-        return this.modsecurity.msc_process_connection(transaction, ip);
+    /**
+     * Perform the analysis on the connection.
+     *
+     * @param transactionPtr Transaction pointer.
+     * @param clientIp Client's IP address in text format.
+     * @param clientPort Client's port
+     * @param serverIp Server's IP address in text format.
+     * @param serverPort Server's port
+     */
+    public processConnection(transactionPtr: Buffer, clientIp: string, clientPort: number, serverIp: string, serverPort: number): void {
+        if (this.modSecurityLibrary.msc_process_connection(transactionPtr, clientIp, clientPort, serverIp, serverPort) !== 1) {
+            throw new ModSecurityError('msc_process_connection failed');
+        }
     }
 
-    public processUri(transaction, fullUrl, method, httpVersion) {
-        return this.modsecurity.msc_process_uri(transaction, fullUrl, method, httpVersion);
+    /**
+     * Perform the analysis on the URI and all the query string variables.
+     *
+     * @param transactionPtr Transaction pointer.
+     * @param fullUrl Uri.
+     * @param method Protocol (GET, POST, PUT).
+     * @param httpVersion Http version (1.0, 1.2, 2.0).
+     */
+    public processUri(transactionPtr: Buffer, fullUrl: string, method: string, httpVersion: string): void {
+        if (this.modSecurityLibrary.msc_process_uri(transactionPtr, fullUrl, method, httpVersion) !== 1) {
+            throw new ModSecurityError('msc_process_uri failed');
+        }
     }
 
-    public addRequestHeader(transaction, key, value) {
-        return this.modsecurity.msc_add_request_header(transaction, key, value);
+    /**
+     * Adds a request header to the transaction.
+     *
+     * @param transactionPtr Transaction pointer.
+     * @param key Header name.
+     * @param value Header value.
+     */
+    public addRequestHeader(transactionPtr: Buffer, key: string, value: string): void {
+        if (this.modSecurityLibrary.msc_add_request_header(transactionPtr, key, value) !== 1) {
+            throw new ModSecurityError('msc_add_request_header failed');
+        }
     }
 
-    public processRequestHeaders(transaction) {
-        return this.modsecurity.msc_process_request_headers(transaction);
+    /**
+     * Perform the analysis on the request readers.
+     *
+     * Remember to check for a possible intervention.
+     * 
+     * @param transactionPtr Transaction pointer.
+     */
+    public processRequestHeaders(transactionPtr: Buffer): void {
+        if (this.modSecurityLibrary.msc_process_request_headers(transactionPtr) !== 1) {
+            throw new ModSecurityError('msc_process_request_headers failed');
+        }
     }
 
-    public appendRequestBody(transaction, body: string) {
-        return this.modsecurity.msc_append_request_body(transaction, body, body.length);
+    /**
+     * Adds request body to be inspected.
+     *
+     * "While feeding ModSecurity remember to keep checking if there is an
+     * intervention, Sec Language has the capability to set the maximum
+     * inspection size which may be reached, and the decision on what to do
+     * in this case is upon the rules."
+     * 
+     * @param transactionPtr Transaction pointer.
+     * @param body The request body (or chunk of the request body).
+     */
+    public appendRequestBody(transactionPtr: Buffer, body: string): void {
+        if (this.modSecurityLibrary.msc_append_request_body(transactionPtr, body, body.length) !== 1) {
+            throw new ModSecurityError('msc_append_request_body failed');
+        }
     }
 
-    public processRequestBody(transaction) {
-        return this.modsecurity.msc_process_request_body(transaction);
+    /**
+     * Perform the analysis on the request body (if any).
+     *
+     * "This function perform the analysis on the request body. It is optional to
+     * call that function. If this API consumer already know that there isn't a
+     * body for inspect it is recommended to skip this step."
+     * 
+     * "It is necessary to "append" the request body prior to the execution
+     * of this function."
+     *
+     * @param transactionPtr Transaction pointer.
+     */
+    public processRequestBody(transactionPtr: Buffer): void {
+        if (this.modSecurityLibrary.msc_process_request_body(transactionPtr) !== 1) {
+            throw new ModSecurityError('msc_process_request_body failed');
+        }
     }
 
-    public addResponseHeader(transaction, key, value) {
-        return this.modsecurity.msc_add_response_header(transaction, key, value);
+    /**
+     * Adds a response header.
+     *
+     * @param transactionPtr Transaction pointer.
+     * @param key Header name.
+     * @param value Header value.
+     */
+    public addResponseHeader(transactionPtr: Buffer, key: string, value: string): void {
+        if (this.modSecurityLibrary.msc_add_response_header(transactionPtr, key, value) !== 1) {
+            throw new ModSecurityError('msc_add_response_header failed');
+        }
     }
 
-    public processResponseHeaders(transaction) {
-        return this.modsecurity.msc_process_response_headers(transaction);
+    /**
+     * Perform the analysis on the response headers.
+     *
+     * @param transactionPtr Transaction pointer.
+     */
+    public processResponseHeaders(transactionPtr: Buffer): void {
+        if (this.modSecurityLibrary.msc_process_response_headers(transactionPtr) !== 1) {
+            throw new ModSecurityError('msc_process_response_headers failed');
+
+        }
     }
 
-    public appendResponseBody(transaction, body) {
-        return this.modsecurity.msc_append_response_body(transaction, body, body.length);
+    /**
+     * Adds response body to be inspected.
+     *
+     * @param transactionPtr Transaction pointer.
+     * @param body The response body (or chunk of response body)
+     */
+    public appendResponseBody(transaction: Buffer, body: string): void {
+        if (this.modSecurityLibrary.msc_append_response_body(transaction, body, body.length) !== 1) {
+            throw new ModSecurityError('msc_append_response_body failed');
+        }
     }
 
-    public processResponseBody(transaction) {
-        return this.modsecurity.msc_process_response_body(transaction);
+    /**
+     * Perform the analysis on the response body (if any).
+     *
+     * @param transactionPtr Transaction pointer.
+     */
+    public processResponseBody(transactionPtr: Buffer): void {
+        if (this.modSecurityLibrary.msc_process_response_body(transactionPtr) !== 1) {
+            throw new ModSecurityError('msc_process_response_body failed');
+        }
     }
 
-    public processLogging(transaction) {
-        return this.modsecurity.msc_process_logging(transaction);
+    /**
+     * Logging all information relative to this transaction.
+     *
+     * "At this point there is not need to hold the connection, the response can be
+     * delivered prior to the execution of this function."
+     *
+     * @param transactionPtr Transaction pointer.
+     */
+    public processLogging(transactionPtr: Buffer): void {
+        if (this.modSecurityLibrary.msc_process_logging(transactionPtr) !== 1) {
+            throw new ModSecurityError('msc_process_logging failed');
+        }
     }
 
-    public transactionCleanup(transaction) {
-        return this.modsecurity.msc_transaction_cleanup(transaction);
+    /**
+     * Removes all the resources allocated by a given Transaction.
+     *
+     * @param transactionPtr Transaction pointer.
+     */
+    public transactionCleanup(transactionPtr: Buffer): void {
+        if (this.modSecurityLibrary.msc_transaction_cleanup(transactionPtr) === 1) {
+            throw new ModSecurityError('msc_transaction_cleanup failed');
+        }
     }
 
-    public intervention(transaction, itPtr) {
-        return this.modsecurity.msc_intervention(transaction, itPtr);
+    /**
+     * Check if ModSecurity has anything to ask to the server.
+     *
+     * Intervention can generate a log event and/or perform a disruptive action.
+     *
+     * @param transactionPtr Transaction pointer.
+     * @param interventionPtr Intervention pointer.
+     *
+     * @returns true if an intervention is required, false if not.
+     */
+    public intervention(transactionPtr: Buffer, interventionPtr: Buffer): boolean {
+        return this.modSecurityLibrary.msc_intervention(transactionPtr, interventionPtr) === 1;
     }
 }

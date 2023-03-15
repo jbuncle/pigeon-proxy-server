@@ -1,33 +1,34 @@
-import * as ref from 'ref-napi';
+import { NULL } from 'ref-napi';
 import { InterventionError } from './InterventionError';
 import { ModSecurity, ModSecurityIntervention } from './ModSecurity';
-
 
 export class ModSecurityTransaction {
 
 
-    public static create(modSecurity: ModSecurity, modsec, ruleSet): ModSecurityTransaction {
+    public static create(modSecurity: ModSecurity, modsec: Buffer, ruleSet: Buffer): ModSecurityTransaction {
         // Create a new transaction with the ModSecurity instance and rules set
         const transaction = modSecurity.newTransaction(modsec, ruleSet);
-        if (transaction.isNull()) {
-            throw new Error('Failed to create transaction');
-        }
+
         const modSecurityTransaction: ModSecurityTransaction = new ModSecurityTransaction(modSecurity, transaction);
         modSecurityTransaction.processIntervention();
         return modSecurityTransaction;
     }
 
+    /**
+     * Check if ModSecurity has determined if an "intervention" is required, and convert to an error if necessary.
+     */
     private processIntervention() {
         const intervention: typeof ModSecurityIntervention = new ModSecurityIntervention({
             status: 200,
-            url: ref.NULL,
-            log: ref.NULL,
-            disruptive: 0
+            url: NULL,
+            log: NULL,
+            disruptive: 0,
+            pause: 0
         });
 
         const itPtr = intervention.ref();
-        const interventionRequired = this.modSecurity.intervention(this.transaction, itPtr);
-        if (interventionRequired !== 0) {
+        const interventionRequired: boolean = this.modSecurity.intervention(this.transactionPtr, itPtr);
+        if (interventionRequired) {
             if (intervention.disruptive !== 0) {
                 throw InterventionError.fromIntervention(intervention);
             }
@@ -36,80 +37,97 @@ export class ModSecurityTransaction {
 
     private constructor(
         private readonly modSecurity: ModSecurity,
-        private readonly transaction
+        private readonly transactionPtr
     ) { }
 
-    public processConnection(ip: string): void {
+    /**
+     * Check the connection info.
+     *
+     * @param clientIp 
+     * @param clientPort 
+     * @param serverIp 
+     * @param serverPort 
+     */
+    public processConnection(clientIp: string, clientPort: number, serverIp: string, serverPort: number): void {
         // Process the transaction with the request and response data
-        if (this.modSecurity.processConnection(this.transaction, ip) !== 1) {
-            throw new Error('Failed msc_process_connection');
-        }
+        this.modSecurity.processConnection(this.transactionPtr, clientIp, clientPort, serverIp, serverPort);
         this.processIntervention();
     }
 
+    /**
+     * Check request URL.
+     *
+     * @param fullUrl 
+     * @param method 
+     * @param httpVersion 
+     */
     public processUri(fullUrl: string, method: string, httpVersion: string): void {
-        if (this.modSecurity.processUri(this.transaction, fullUrl, method, httpVersion) !== 1) {
-            throw new Error('Failed msc_process_uri');
-        }
+        this.modSecurity.processUri(this.transactionPtr, fullUrl, method, httpVersion)
         this.processIntervention();
     }
 
+    /**
+     * Check request headers.
+     *
+     * @param headers 
+     */
     public processRequestHeaders(headers: Record<string, string>): void {
         for (const key in headers) {
             if (Object.prototype.hasOwnProperty.call(headers, key)) {
                 const value = headers[key];
-                this.modSecurity.addRequestHeader(this.transaction, key, value);
+                this.modSecurity.addRequestHeader(this.transactionPtr, key, value);
                 this.processIntervention();
             }
         }
-        if (this.modSecurity.processRequestHeaders(this.transaction) !== 1) {
-            throw new Error('Failed msc_process_request_headers');
-        }
+        this.modSecurity.processRequestHeaders(this.transactionPtr)
         this.processIntervention();
     }
 
-    public processRequestBody(body: string): void {
-        if (body) {
-            this.modSecurity.appendRequestBody(this.transaction, body);
-        } else {
-            console.log('No request body');
-        }
-
-        if (this.modSecurity.processRequestBody(this.transaction) !== 1) {
-            throw new Error('Failed msc_process_request_body');
-        }
+    public appendRequestBody(chunk: string): void {
+        this.modSecurity.appendRequestBody(this.transactionPtr, chunk)
         this.processIntervention();
     }
 
+    public processRequestBody(): void {
+        this.modSecurity.processRequestBody(this.transactionPtr)
+        this.processIntervention();
+    }
+
+    /**
+     * Check response headers.
+     *
+     * @param headers 
+     */
     public processResponseHeaders(headers: Record<string, string>): void {
         for (const key in headers) {
             if (Object.prototype.hasOwnProperty.call(headers, key)) {
                 const value = headers[key];
-                this.modSecurity.addResponseHeader(this.transaction, key, value);
+                this.modSecurity.addResponseHeader(this.transactionPtr, key, value);
                 this.processIntervention();
             }
         }
-        if (this.modSecurity.processResponseHeaders(this.transaction) !== 1) {
-            throw new Error('Failed msc_process_response_headers');
-        }
+        this.modSecurity.processResponseHeaders(this.transactionPtr)
         this.processIntervention();
     }
 
-    public processResponseBody(body: string): void {
-        if (body) {
-            this.modSecurity.appendResponseBody(this.transaction, body);
-        } else {
-            console.log('No response body');
-        }
-
-        if (this.modSecurity.processResponseBody(this.transaction) !== 1) {
-            throw new Error('Failed msc_process_response_body');
-        }
+    /**
+     * Check response body.
+     */
+    public processResponseBody(): void {
+        this.modSecurity.processResponseBody(this.transactionPtr)
         this.processIntervention();
     }
 
+    public appendResponseBody(chunk: string){
+        this.modSecurity.appendResponseBody(this.transactionPtr, chunk);
+        this.processIntervention();
+    }
+
+    /**
+     * Complete the transaction.
+     */
     public finish(): void {
-        this.modSecurity.processLogging(this.transaction);
-        this.modSecurity.transactionCleanup(this.transaction);
+        this.modSecurity.processLogging(this.transactionPtr);
+        this.modSecurity.transactionCleanup(this.transactionPtr);
     }
 }
