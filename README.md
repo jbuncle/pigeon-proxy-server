@@ -17,13 +17,12 @@ It's designed to replace a setup of `nginx` (with Caching and ModSecurity), `ngi
 - **Docker Integration**: The server automatically routes requests to running containers based on `VIRTUAL_HOST` and `VIRTUAL_PORT` labels on the containers.
 - **LetsEncrypt**: LetsEncrypt certificates can be automatically generated and renewed for Docker containers using `LETSENCRYPT_HOST` and `LETSENCRYPT_EMAIL` labels on running containers.
 - **ModSecurity**: The server integrates with libModSecurity to check and reject malicious requests.
-- **Static Routes**: Define static routes in a JSON file, allowing routing to locations outside of Docker
+- **Static Routes**: Watches static routes in a JSON file, allowing routing to locations outside of Docker
 - **Caching**: Caches GET requests to filesystem
 
 ### TODO
 
 - Automatically generate LetsEncrypt certificates for all domains (not just Docker).
-- Watch routes files, allowing live changes
 - Allow definition of container running this app, so that it can determine which containers are accessible
 - Compression?
 

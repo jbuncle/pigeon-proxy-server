@@ -14,10 +14,10 @@ import { findModSec } from './ModSecurity/ModSecurityUtil';
 import { AggregatedProxyRouter } from './Proxy/AggregatedProxyRouter';
 import { DockerMonitor, createDockerMonitor } from './Proxy/DockerMonitor';
 import { DockerProxyRouter } from './Proxy/DockerProxyRouter';
-import { FixedRoutesRouter } from './Proxy/FixedRoutesRouter';
 import { ProxyRouterI } from './Proxy/ProxyRouterI';
 import { SNICallbackFactory } from './Utils/SNICallbackFactory';
 import { RequestCache } from './Caching/RequestCache';
+import { FileRoutesRouter } from './Proxy/FileRoutesRouter';
 
 export class App {
 
@@ -63,11 +63,10 @@ export class App {
 		const insecureServer: HttpServer<typeof IncomingMessage, typeof ServerResponse> = http.createServer(app);
 
 		// Setup proxy
-		const fixedProxyRouter: FixedRoutesRouter = new FixedRoutesRouter();
+		const fileRoutesRouter: FileRoutesRouter = new FileRoutesRouter();
 		if (fixedRoutesFile !== undefined) {
 			console.log('Loading routes from file', fixedRoutesFile);
-			await fixedProxyRouter.addRoutesFromFile(fixedRoutesFile);
-			console.log(fixedProxyRouter.getRoutes());
+			fileRoutesRouter.addFile(fixedRoutesFile);
 		}
 
 		const dockerMonitor: DockerMonitor = createDockerMonitor();
@@ -90,7 +89,7 @@ export class App {
 		});
 
 		// Setup the reverse proxy
-		const proxyRouter: ProxyRouterI = new AggregatedProxyRouter([fixedProxyRouter, dockerProxyRouter]);
+		const proxyRouter: ProxyRouterI = new AggregatedProxyRouter([fileRoutesRouter, dockerProxyRouter]);
 		const proxyMiddleware = createProxyMiddleware({
 			router: async (req: express.Request): Promise<string | undefined> => {
 				const result: string = await proxyRouter.router(req);
