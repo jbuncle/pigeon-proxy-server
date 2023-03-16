@@ -17,6 +17,7 @@ import { DockerProxyRouter } from './Proxy/DockerProxyRouter';
 import { FixedRoutesRouter } from './Proxy/FixedRoutesRouter';
 import { ProxyRouterI } from './Proxy/ProxyRouterI';
 import { SNICallbackFactory } from './Utils/SNICallbackFactory';
+import { RequestCache } from './Caching/RequestCache';
 
 export class App {
 
@@ -107,6 +108,9 @@ export class App {
 
 		// Request logging
 		app.use(morgan('combined'));
+
+		// TODO: Setup caching
+		app.use(new RequestCache().createMiddleware());
 
 		// Setup WAF
 		app.use(modSecurityMiddleware);
