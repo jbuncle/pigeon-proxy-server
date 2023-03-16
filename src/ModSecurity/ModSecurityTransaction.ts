@@ -2,37 +2,18 @@ import { NULL } from 'ref-napi';
 import { InterventionError } from './InterventionError';
 import { ModSecurity, ModSecurityIntervention } from './ModSecurity';
 
+/**
+ * Represents a unit that will be used to inspect a single request.
+ */
 export class ModSecurityTransaction {
 
-
-    public static create(modSecurity: ModSecurity, modsec: Buffer, ruleSet: Buffer): ModSecurityTransaction {
+    public static create(modSecurity: ModSecurity, modSecPtr: Buffer, ruleSetPtr: Buffer): ModSecurityTransaction {
         // Create a new transaction with the ModSecurity instance and rules set
-        const transaction = modSecurity.newTransaction(modsec, ruleSet);
+        const transaction = modSecurity.newTransaction(modSecPtr, ruleSetPtr);
 
         const modSecurityTransaction: ModSecurityTransaction = new ModSecurityTransaction(modSecurity, transaction);
         modSecurityTransaction.processIntervention();
         return modSecurityTransaction;
-    }
-
-    /**
-     * Check if ModSecurity has determined if an "intervention" is required, and convert to an error if necessary.
-     */
-    private processIntervention() {
-        const intervention: typeof ModSecurityIntervention = new ModSecurityIntervention({
-            status: 200,
-            url: NULL,
-            log: NULL,
-            disruptive: 0,
-            pause: 0
-        });
-
-        const itPtr = intervention.ref();
-        const interventionRequired: boolean = this.modSecurity.intervention(this.transactionPtr, itPtr);
-        if (interventionRequired) {
-            if (intervention.disruptive !== 0) {
-                throw InterventionError.fromIntervention(intervention);
-            }
-        }
     }
 
     private constructor(
@@ -118,7 +99,7 @@ export class ModSecurityTransaction {
         this.processIntervention();
     }
 
-    public appendResponseBody(chunk: string){
+    public appendResponseBody(chunk: string) {
         this.modSecurity.appendResponseBody(this.transactionPtr, chunk);
         this.processIntervention();
     }
@@ -130,4 +111,26 @@ export class ModSecurityTransaction {
         this.modSecurity.processLogging(this.transactionPtr);
         this.modSecurity.transactionCleanup(this.transactionPtr);
     }
+
+    /**
+     * Check if ModSecurity has determined if an "intervention" is required, and convert to an error if necessary.
+     */
+    private processIntervention() {
+        const intervention: typeof ModSecurityIntervention = new ModSecurityIntervention({
+            status: 200,
+            url: NULL,
+            log: NULL,
+            disruptive: 0,
+            pause: 0
+        });
+
+        const itPtr: Buffer = intervention.ref();
+        const interventionRequired: boolean = this.modSecurity.intervention(this.transactionPtr, itPtr);
+        if (interventionRequired) {
+            if (intervention.disruptive !== 0) {
+                throw InterventionError.fromIntervention(intervention);
+            }
+        }
+    }
+
 }

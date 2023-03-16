@@ -1,9 +1,8 @@
 import { NextFunction, Request, Response } from 'express';
 import path from 'path';
-import { InterventionError } from './InterventionError';
 import { ModSecurity } from './ModSecurity';
-import { ModSecurityTransaction } from './ModSecurityTransaction';
 import { ModSecurityError } from './ModSecurityError';
+import { ModSecurityTransaction } from './ModSecurityTransaction';
 
 export class ModSecurityLoader {
 
@@ -34,6 +33,20 @@ export class ModSecurityLoader {
         console.log('Loaded rules from file', rulesFile);
     }
 
+    /**
+     * Initialise and start ModSecurity and return Express middleware.
+     */
+    public createMiddleware() {
+        // Define an Express.js route to handle incoming requests
+        return async (req: Request, res: Response, next) => {
+            try {
+                await this.processRequest(req, res, next);
+            } catch (e: unknown) {
+                next(e);
+            }
+        }
+    }
+
     private bindToRequest(transaction, req: Request, res: Response, next: NextFunction): void {
         req.setEncoding('utf8');
 
@@ -54,24 +67,42 @@ export class ModSecurityLoader {
         });
 
     }
+
     private bindToResponse(transaction: ModSecurityTransaction, res: Response, next: NextFunction): void {
-        res.on('data', function (chunk) {
-            try {
-                transaction.appendResponseBody(chunk);
-            } catch (e) {
-                next(e);
+        this.bindToResponseWrite(res, (data: any) => {
+            transaction.appendResponseBody(data);
+
+            return data;
+        }, (data: any) => {
+            if (data !== undefined) {
+                transaction.appendResponseBody(data);
             }
-        });
-        res.on('end', function () {
-            try {
-                transaction.processResponseBody();
-            } catch (e) {
-                next(e);
-            }
-        });
-        res.on("close", () => {
+            transaction.processResponseBody();
+
             transaction.finish();
+
+            return data;
         });
+    }
+
+    private bindToResponseWrite(
+        res: Response,
+        onWrite: <T>(data: any) => T,
+        onEnd: <T>(data: any) => T
+    ): void {
+
+        const originalWrite = res.write;
+        res.write = (data, ...args: any) => {
+            // Buffer.concat(responseData, data);
+            data = onWrite(data);
+            return originalWrite.apply(res, [data, ...args]);
+        };
+
+        const originalEnd = res.end;
+        res.end = (data: any, ...args: any) => {
+            data = onEnd(data);
+            return originalEnd.apply(res, [data, ...args]);
+        };
     }
 
     private async processRequest(req: Request, res: Response, next: NextFunction) {
@@ -96,6 +127,7 @@ export class ModSecurityLoader {
 
         next();
     }
+
     /**
      * Flatten header arrays.
      * @param headers 
@@ -116,19 +148,6 @@ export class ModSecurityLoader {
             }
         }
         return flattened;
-    }
-    /**
-     * Initialise and start ModSecurity and return Express middleware.
-     */
-    public createMiddleware() {
-        // Define an Express.js route to handle incoming requests
-        return async (req: Request, res: Response, next) => {
-            try {
-                await this.processRequest(req, res, next);
-            } catch (e: unknown) {
-                next(e);
-            }
-        }
     }
 
 }

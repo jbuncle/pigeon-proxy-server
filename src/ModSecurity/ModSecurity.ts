@@ -44,6 +44,7 @@ const BINDINGS = {
     msc_rules_dump: [types.int, [RulesSetPtr]],
     msc_intervention: [types.int, [TransactionPtr, ModSecurityInterventionPtr]],
 };
+
 /**
  * Wrapper class for the libModSecurity library.
  * 
