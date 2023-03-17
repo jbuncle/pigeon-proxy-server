@@ -1,5 +1,6 @@
 import { DockerInspectI } from '@jbuncle/docker-api-js';
 import { CertMonitorI } from '@jbuncle/letsencrypt-js';
+import compression from 'compression';
 import express from 'express';
 import http, { Server as HttpServer, IncomingMessage, ServerResponse } from 'http';
 import { Filter, Options, createProxyMiddleware } from 'http-proxy-middleware';
@@ -165,6 +166,9 @@ export class App {
 
 		// Setup WAF
 		app.use(modSecurityMiddleware);
+
+		// Setup compression
+		app.use(compression());
 
 		// Setup proxying
 		app.use(proxyMiddleware);
