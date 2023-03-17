@@ -32,6 +32,8 @@ It's designed to replace a setup of `nginx` (with Caching and ModSecurity), `ngi
 
 The recommended way to run the server is to use the included bash script to run it in a Docker container. To do this, run `./local-dev build-run`.
 
+As this project uses GitHub Packages you will need to define the `GITHUB_TOKEN` variable with a `read:packages` personal access token from GitHub. 
+
 ### Development
 
 To run the server natively on your development machine, you'll need to have `libModSecurity` installed. On Ubuntu, you can install it with `sudo apt-get install libmodsecurity-dev`.

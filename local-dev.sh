@@ -14,8 +14,7 @@ push() {
 }
 
 build() {
-    # npm run build
-    docker build -t ${TAG} .
+    docker build --build-arg GITHUB_TOKEN=${GITHUB_TOKEN} -t ${TAG} .
 }
 
 run() {

@@ -32,8 +32,16 @@ COPY --from=fetch-rules /usr/local/modsecurity-rules /usr/local/modsecurity-rule
 
 WORKDIR /app
 COPY . .
-# RUN npm install
-RUN npm rebuild
-CMD npm run start
 
+
+
+ARG GITHUB_TOKEN
+
+RUN npm config set "@jbuncle:registry" "https://npm.pkg.github.com" && \
+    npm config set //npm.pkg.github.com/:_authToken $GITHUB_TOKEN && \
+    npm install && \
+    npm rebuild
+
+CMD [ "npm", "run", "start" ]
 VOLUME [ "/etc/letsencrypt" ]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
