@@ -11,7 +11,7 @@ export type FetchedResponse = {
     headers: Record<string, number | string | string[]>;
 };
 
-export type Response = FetchedResponse & {
+export type CacheableResponse = FetchedResponse & {
     status: number;
 }
 
@@ -20,14 +20,14 @@ export class FsRequestCache {
     public constructor(
         private readonly cacheTimeMs: number = 3600000,
         private readonly cacheBasePath: string = '/tmp/cache/pigeon-proxy/'
-    ) {}
+    ) { }
 
     /**
      * Write data to cache.
      * @param uri The full resource identifier.
      * @param responseData The response data to write 
      */
-    public async write(uri: string, { data, headers }: Response): Promise<void> {
+    public async write(uri, { data, headers }: CacheableResponse): Promise<void> {
         const cachePath: string = this.getCacheFilePath(uri);
         try {
             await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });

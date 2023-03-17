@@ -1,19 +1,22 @@
 import { DockerInspectI } from "@jbuncle/docker-api-js";
 import { AbstractProxyRouter } from "./AbstractProxyRouter";
 import { DockerMonitor } from "./DockerMonitor";
+import { Logger, LoggerInterface } from "@jbuncle/logging-js";
 
 
 export class DockerProxyRouter extends AbstractProxyRouter {
 
+    private static logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${DockerProxyRouter.name}`);
+
     private routes: Record<string, string> = {};
 
     protected async getRoute(domain: string): Promise<string | undefined> {
-        console.log('Getting route', domain);
+        DockerProxyRouter.logger.info('Getting route', domain);
         if (Object.prototype.hasOwnProperty.call(this.routes, domain)) {
 
             const target: string = this.routes[domain];
 
-            console.log('Found route', domain, '=>', target);
+            DockerProxyRouter.logger.info(`Found route ${domain} => ${target}`);
             return target;
         }
         return undefined;

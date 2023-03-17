@@ -1,14 +1,18 @@
 
+import { Logger, LoggerInterface } from '@jbuncle/logging-js';
 import { NextFunction, Request, Response } from 'express';
 import { FetchedResponse, FsRequestCache } from './FsRequestCache';
+import { RequestHandler } from 'http-proxy-middleware';
 
 export class RequestCache {
+
+    private static logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${RequestCache.name}`);
 
     public constructor(
         private readonly fsRequestCache: FsRequestCache = new FsRequestCache(),
     ) { }
 
-    public createMiddleware() {
+    public createMiddleware(): RequestHandler {
 
         return async (req: Request, res: Response, next: NextFunction) => {
             const fullUrl: string = `${req.protocol}://${req.hostname}${req.originalUrl}`;
@@ -23,6 +27,7 @@ export class RequestCache {
                 // Fetch data from response
                 const cached: FetchedResponse | undefined = await this.fsRequestCache.fetch(fullUrl);
                 if (cached !== undefined) {
+                    RequestCache.logger.debug('Returning response from caching');
                     cached.headers['x-cache-status'] = 'HIT';
                     res.set(cached.headers);
                     res.send(cached.data);
@@ -31,10 +36,11 @@ export class RequestCache {
             } catch (err) {
                 // Cache file doesn't exist or there was an error reading it.
                 console.error(err);
+
             }
 
             // Cache file is stale or doesn't exist, so cache the response data.
-            this.captureResponse(res, fullUrl);
+            this.captureResponse(res, uri);
 
             next();
         };
@@ -85,7 +91,7 @@ export class RequestCache {
                 try {
                     void this.fsRequestCache.write(fullUrl, { data: body, headers: res.getHeaders(), status: res.statusCode });
                 } catch (err) {
-                    console.error(`Failed to cache ${fullUrl}: ${err}`);
+                    RequestCache.logger.debug(`Failed to cache ${fullUrl} - ${err.message}`, { error: err })
                 }
             } else {
                 this.fsRequestCache.purge(fullUrl);

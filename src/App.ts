@@ -5,6 +5,7 @@ import http, { Server as HttpServer, IncomingMessage, ServerResponse } from 'htt
 import { Filter, Options, createProxyMiddleware } from 'http-proxy-middleware';
 import https, { Server as HttpsServer, ServerOptions } from 'https';
 import morgan from 'morgan';
+import { RequestCache } from './Caching/RequestCache';
 import { CertMonitorFactory, CertMonitorOptions } from './LetsEncrypt/CertMonitorFactory';
 import { LeDomainsProvider } from './LetsEncrypt/DockerDomainsProvider';
 import { LetsEncryptUtils } from './LetsEncrypt/LetsEncryptUtil';
@@ -14,11 +15,63 @@ import { findModSec } from './ModSecurity/ModSecurityUtil';
 import { AggregatedProxyRouter } from './Proxy/AggregatedProxyRouter';
 import { DockerMonitor, createDockerMonitor } from './Proxy/DockerMonitor';
 import { DockerProxyRouter } from './Proxy/DockerProxyRouter';
+import { FileRoutesRouter } from './Proxy/FileRoutesRouter';
 import { ProxyRouterI } from './Proxy/ProxyRouterI';
 import { SNICallbackFactory } from './Utils/SNICallbackFactory';
-import { RequestCache } from './Caching/RequestCache';
-import { FileRoutesRouter } from './Proxy/FileRoutesRouter';
+import { ConsoleLoggerFactory, LogLevel, Logger, LoggerInterface } from '@jbuncle/logging-js';
 
+
+/**
+ * Get error message for HTTP status code.
+ *
+ * @param errorCode 
+ * @returns 
+ */
+function getErrorMessage(errorCode: number): string {
+	switch (errorCode) {
+		case 400:
+			return "Bad Request";
+		case 401:
+			return "Unauthorized";
+		case 403:
+			return "Forbidden";
+		case 404:
+			return "Not Found";
+		case 500:
+			return "Internal Server Error";
+		default:
+			return "Unknown Error";
+	}
+}
+
+const modSecurityErrorMiddleware = (err, req, res, next) => {
+
+	// Handle ModSecurity errors
+	if (err instanceof InterventionError) {
+		console.warn(err.log);
+		// TODO: check if 'pause' property needs handling...
+		if (err.url !== null) {
+			res.redirect(err.url);
+			res.end();
+			return;
+		}
+
+		res.status(err.status);
+		res.send(getErrorMessage(err.status));
+		res.end();
+		return;
+	}
+	next(err);
+};
+const errorMiddleware = (err, req, res, next) => {
+	// Everything else
+	if (err) {
+		console.error(err);
+		res.status(500);
+		res.send(getErrorMessage(500));
+		res.end();
+	}
+};
 export class App {
 
 
@@ -37,6 +90,9 @@ export class App {
 	}
 
 	public static async main() {
+		const logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${App.name}`);
+		logger.debug('Starting...');
+
 		const args: Record<string, string> = App.getArgs();
 
 		const staging: boolean = (args.stage) ? args.stage !== 'production' : true;
@@ -65,7 +121,7 @@ export class App {
 		// Setup proxy
 		const fileRoutesRouter: FileRoutesRouter = new FileRoutesRouter();
 		if (fixedRoutesFile !== undefined) {
-			console.log('Loading routes from file', fixedRoutesFile);
+			logger.info('Loading routes from file', fixedRoutesFile);
 			fileRoutesRouter.addFile(fixedRoutesFile);
 		}
 
@@ -93,7 +149,7 @@ export class App {
 		const proxyMiddleware = createProxyMiddleware({
 			router: async (req: express.Request): Promise<string | undefined> => {
 				const result: string = await proxyRouter.router(req);
-				console.log(`routing to ${result}`);
+				logger.debug(`Routing to ${result}`);
 				return result;
 			},
 			logLevel: 'silent',
@@ -114,38 +170,15 @@ export class App {
 		// Setup WAF
 		app.use(modSecurityMiddleware);
 
+		// Setup proxying
 		app.use(proxyMiddleware);
 
-		// Handle errors
-		app.use((err, req, res, next) => {
+		// Handle ModSecurity errors
+		app.use(modSecurityErrorMiddleware);
 
-			// Handle ModSecurity errors
-			if (err instanceof InterventionError) {
-				console.warn(err.log);
-				// TODO: check if 'pause' property needs handling...
-				if (err.url !== null) {
-					res.redirect(err.url);
-					res.end();
-					return;
-				}
+		// Handle general errors
+		app.use(errorMiddleware);
 
-				res.status(err.status);
-				res.send(App.getErrorMessage(err.status));
-				res.end();
-				return;
-			}
-
-			// Everything else
-			if (err) {
-				console.error(err);
-				res.status(500);
-				res.send(App.getErrorMessage(500));
-				res.end();
-			}
-		});
-
-		// Setup caching
-		// TODO
 		// Start up everything
 		// Start monitoring letsencrypt certs
 		certMonitor.start(1440);
@@ -157,28 +190,4 @@ export class App {
 		secureServer.listen(8443);
 	}
 
-
-
-	/**
-	 * Get error message for HTTP status code.
-	 *
-	 * @param errorCode 
-	 * @returns 
-	 */
-	private static getErrorMessage(errorCode: number): string {
-		switch (errorCode) {
-			case 400:
-				return "Bad Request";
-			case 401:
-				return "Unauthorized";
-			case 403:
-				return "Forbidden";
-			case 404:
-				return "Not Found";
-			case 500:
-				return "Internal Server Error";
-			default:
-				return "Unknown Error";
-		}
-	}
 }
