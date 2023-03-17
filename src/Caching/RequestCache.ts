@@ -15,9 +15,15 @@ export class RequestCache {
     public createMiddleware(): RequestHandler {
 
         return async (req: Request, res: Response, next: NextFunction) => {
-            const fullUrl: string = `${req.protocol}://${req.hostname}${req.originalUrl}`;
-            if (req.method !== 'GET' || req.headers['cache-control'] === 'no-cache') {
-                console.log('Skipped caching', fullUrl)
+            const acceptEncoding: string = String(req.headers['accept-encoding']);
+            const acceptLanguage: string = String(req.headers['accept-language']);
+            const uri: string = `${acceptEncoding.replace(' ', '')};${acceptLanguage.replace(' ', '')};${req.protocol}://${req.hostname}${req.originalUrl}`;
+
+            if (req.method !== 'GET'
+                || req.headers['cache-control'] === 'no-cache'
+                || req.headers.authorization !== undefined
+            ) {
+                RequestCache.logger.debug(`Skipped caching ${uri}`)
                 // Only cache GET requests
                 next();
                 return;
@@ -25,9 +31,9 @@ export class RequestCache {
 
             try {
                 // Fetch data from response
-                const cached: FetchedResponse | undefined = await this.fsRequestCache.fetch(fullUrl);
+                const cached: FetchedResponse | undefined = await this.fsRequestCache.fetch(uri);
                 if (cached !== undefined) {
-                    RequestCache.logger.debug('Returning response from caching');
+                    RequestCache.logger.debug('Returning response from cache');
                     cached.headers['x-cache-status'] = 'HIT';
                     res.set(cached.headers);
                     res.send(cached.data);
