@@ -1,5 +1,5 @@
 import { DockerInspectI } from "@jbuncle/docker-api-js";
-import { AbstractProxyRouter } from "./AbstractProxyRouter";
+import { AbstractProxyRouter } from "../AbstractProxyRouter";
 import { DockerMonitor } from "./DockerMonitor";
 import { Logger, LoggerInterface } from "@jbuncle/logging-js";
 
