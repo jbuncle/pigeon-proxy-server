@@ -3,8 +3,11 @@ import path from 'path';
 import { ModSecurity } from './ModSecurity';
 import { ModSecurityError } from './ModSecurityError';
 import { ModSecurityTransaction } from './ModSecurityTransaction';
+import { Logger, LoggerInterface } from '@jbuncle/logging-js';
 
 export class ModSecurityLoader {
+
+    private static logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${ModSecurityLoader.name}`);
 
     private modSecPtr: Buffer;
     private ruleSetPtr: Buffer;
@@ -20,6 +23,7 @@ export class ModSecurityLoader {
     }
 
     public init() {
+
         this.modSecurity = new ModSecurity(this.libPath);
 
         // Load the ModSecurity library and initialize it
@@ -30,7 +34,7 @@ export class ModSecurityLoader {
 
         const rulesFile: string = path.resolve(this.ruleSetFile);
         this.modSecurity.rulesAddFile(this.ruleSetPtr, rulesFile);
-        console.log('Loaded rules from file', rulesFile);
+        ModSecurityLoader.logger.info('Loaded rules from file', rulesFile);
     }
 
     /**
@@ -47,45 +51,72 @@ export class ModSecurityLoader {
         }
     }
 
-    private bindToRequest(transaction, req: Request, res: Response, next: NextFunction): void {
+    private bindToRequest(transaction: ModSecurityTransaction, req: Request, res: Response, next: NextFunction): void {
         req.setEncoding('utf8');
 
+        this.bindToRequestStream(req, (data: any) => {
+            try {
+                // Data might be written after we've closed
+                if (transaction.isOpen()) {
+                    transaction.appendRequestBody(data);
+                }
+            } catch (e) {
+                next(e);
+            }
+        }, (data?) => {
+            try {
+                // Data might be written after we've closed
+                if (transaction.isOpen()) {
+                    if (data) {
+                        transaction.appendRequestBody(data);
+                    }
+                    ModSecurityLoader.logger.debug('Processing request body');
+                    transaction.processRequestBody();
+                }
+            } catch (e) {
+                next(e);
+            }
+        });
+    }
+
+    private bindToRequestStream(
+        req: Request,
+        onData: <T>(data: any) => void,
+        onEnd: <T>(data: any) => void
+    ) {
         req.on('data', function (chunk) {
-            try {
-                transaction.appendRequestBody(chunk);
-            } catch (e) {
-                next(e);
-            }
+            onData(chunk);
         });
 
-        req.on('end', function () {
-            try {
-                transaction.processRequestBody();
-            } catch (e) {
-                next(e);
-            }
+        req.on('end', function (data) {
+            onEnd(data);
         });
-
     }
 
     private bindToResponse(transaction: ModSecurityTransaction, res: Response, next: NextFunction): void {
-        this.bindToResponseWrite(res, (data: any) => {
-            transaction.appendResponseBody(data);
+        this.bindToResponseStream(res, (data: any) => {
+            if (transaction.isOpen()) {
+                transaction.appendResponseBody(data);
+                ModSecurityLoader.logger.debug('Response written');
+            }
 
             return data;
         }, (data: any) => {
-            if (data !== undefined) {
-                transaction.appendResponseBody(data);
+            if (transaction.isOpen()) {
+                ModSecurityLoader.logger.debug('Response ended');
+                if (data !== undefined) {
+                    transaction.appendResponseBody(data);
+                }
+                ModSecurityLoader.logger.debug('Processing response body');
+                transaction.processResponseBody();
+
+                transaction.finish();
             }
-            transaction.processResponseBody();
-
-            transaction.finish();
-
             return data;
         });
     }
 
-    private bindToResponseWrite(
+    private bindToResponseStream(
         res: Response,
         onWrite: <T>(data: any) => T,
         onEnd: <T>(data: any) => T
@@ -114,11 +145,15 @@ export class ModSecurityLoader {
         const serverAddress: string = req.socket.localAddress;
         const serverPort: number = req.socket.localPort;
 
+        ModSecurityLoader.logger.debug('Processing connection');
         transaction.processConnection(clientAddress, clientPort, serverAddress, serverPort);
 
+        ModSecurityLoader.logger.debug('Processing URI');
         const fullUrl: string = `${req.protocol}://${req.hostname}${req.originalUrl}`;
         transaction.processUri(fullUrl, req.method, req.httpVersion)
 
+
+        ModSecurityLoader.logger.debug('Processing request headers');
         // TODO: use req.rawHeaders
         transaction.processRequestHeaders(this.flattenHeaders(req.headers));
 

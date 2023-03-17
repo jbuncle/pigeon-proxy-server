@@ -1,11 +1,18 @@
 import { NULL } from 'ref-napi';
 import { InterventionError } from './InterventionError';
 import { ModSecurity, ModSecurityIntervention } from './ModSecurity';
+import { Logger, LoggerInterface } from '@jbuncle/logging-js';
+import { ModSecurityError } from './ModSecurityError';
 
 /**
  * Represents a unit that will be used to inspect a single request.
  */
 export class ModSecurityTransaction {
+
+
+    private isClosed: boolean = false;
+
+    private static logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${ModSecurityTransaction.name}`);
 
     public static create(modSecurity: ModSecurity, modSecPtr: Buffer, ruleSetPtr: Buffer): ModSecurityTransaction {
         // Create a new transaction with the ModSecurity instance and rules set
@@ -21,6 +28,10 @@ export class ModSecurityTransaction {
         private readonly transactionPtr
     ) { }
 
+
+    public isOpen():boolean {
+        return !this.isClosed;
+    }
     /**
      * Check the connection info.
      *
@@ -30,9 +41,16 @@ export class ModSecurityTransaction {
      * @param serverPort 
      */
     public processConnection(clientIp: string, clientPort: number, serverIp: string, serverPort: number): void {
+        this.assertOpen();
         // Process the transaction with the request and response data
         this.modSecurity.processConnection(this.transactionPtr, clientIp, clientPort, serverIp, serverPort);
         this.processIntervention();
+    }
+
+    private assertOpen(): void {
+        if (this.isClosed) {
+            throw new ModSecurityError('Transaction has been closed.');
+        }
     }
 
     /**
@@ -43,6 +61,7 @@ export class ModSecurityTransaction {
      * @param httpVersion 
      */
     public processUri(fullUrl: string, method: string, httpVersion: string): void {
+        this.assertOpen();
         this.modSecurity.processUri(this.transactionPtr, fullUrl, method, httpVersion)
         this.processIntervention();
     }
@@ -53,6 +72,7 @@ export class ModSecurityTransaction {
      * @param headers 
      */
     public processRequestHeaders(headers: Record<string, string>): void {
+        this.assertOpen();
         for (const key in headers) {
             if (Object.prototype.hasOwnProperty.call(headers, key)) {
                 const value = headers[key];
@@ -65,11 +85,13 @@ export class ModSecurityTransaction {
     }
 
     public appendRequestBody(chunk: string): void {
+        this.assertOpen();
         this.modSecurity.appendRequestBody(this.transactionPtr, chunk)
         this.processIntervention();
     }
 
     public processRequestBody(): void {
+        this.assertOpen();
         this.modSecurity.processRequestBody(this.transactionPtr)
         this.processIntervention();
     }
@@ -80,6 +102,7 @@ export class ModSecurityTransaction {
      * @param headers 
      */
     public processResponseHeaders(headers: Record<string, string>): void {
+        this.assertOpen();
         for (const key in headers) {
             if (Object.prototype.hasOwnProperty.call(headers, key)) {
                 const value = headers[key];
@@ -95,11 +118,13 @@ export class ModSecurityTransaction {
      * Check response body.
      */
     public processResponseBody(): void {
+        this.assertOpen();
         this.modSecurity.processResponseBody(this.transactionPtr)
         this.processIntervention();
     }
 
     public appendResponseBody(chunk: string) {
+        this.assertOpen();
         this.modSecurity.appendResponseBody(this.transactionPtr, chunk);
         this.processIntervention();
     }
@@ -108,8 +133,13 @@ export class ModSecurityTransaction {
      * Complete the transaction.
      */
     public finish(): void {
-        this.modSecurity.processLogging(this.transactionPtr);
-        this.modSecurity.transactionCleanup(this.transactionPtr);
+        this.assertOpen();
+        try {
+            this.modSecurity.processLogging(this.transactionPtr);
+            this.modSecurity.transactionCleanup(this.transactionPtr);
+        } finally {
+            this.isClosed = true;
+        }
     }
 
     /**
@@ -127,10 +157,11 @@ export class ModSecurityTransaction {
         const itPtr: Buffer = intervention.ref();
         const interventionRequired: boolean = this.modSecurity.intervention(this.transactionPtr, itPtr);
         if (interventionRequired) {
+            ModSecurityTransaction.logger.info(`Intervention required ${JSON.stringify(intervention)}`);
             if (intervention.disruptive !== 0) {
+                ModSecurityTransaction.logger.info(`Disruption required`);
                 throw InterventionError.fromIntervention(intervention);
             }
         }
     }
-
 }

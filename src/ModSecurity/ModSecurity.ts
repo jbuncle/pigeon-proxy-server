@@ -3,6 +3,7 @@ import * as ref from 'ref-napi';
 import { isNull, refType, types } from 'ref-napi';
 import StructDi from 'ref-struct-di';
 import { ModSecurityError } from './ModSecurityError';
+import { Logger, LoggerInterface } from '@jbuncle/logging-js';
 
 export const ModSecurityIntervention = StructDi(ref)({
     status: types.int,
@@ -53,6 +54,7 @@ const BINDINGS = {
  * For reference see https://github.com/SpiderLabs/ModSecurity
  */
 export class ModSecurity {
+    private static logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${ModSecurity.name}`);
 
     /**
      * Bindings to the native libModSecurity C library.
@@ -70,6 +72,7 @@ export class ModSecurity {
      * @returns ModSecurity instance pointer.
      */
     public init(): Buffer {
+        ModSecurity.logger.debug('msc_init');
         const modSec: Buffer = this.modSecurityLibrary.msc_init();
         if (isNull(modSec)) {
             throw new ModSecurityError('Failed to initialize ModSecurity');
@@ -83,6 +86,7 @@ export class ModSecurity {
      * @returns RuleSet instance pointer.
      */
     public createRulesSet(): Buffer {
+        ModSecurity.logger.debug('msc_create_rules_set');
         const ruleSetPtr: Buffer = this.modSecurityLibrary.msc_create_rules_set();
         if (isNull(ruleSetPtr)) {
             throw new ModSecurityError('Failed to create rules set');
@@ -99,6 +103,7 @@ export class ModSecurity {
      * @returns number of rules added.
      */
     public rulesAddFile(ruleSetPtr: Buffer, rulesFile: string): number {
+        ModSecurity.logger.debug('msc_rules_add_file');
         const errorPtr = ref.alloc(types.CString);
         // Number of rules loaded, -1 if failed.
         const numberOfRules = this.modSecurityLibrary.msc_rules_add_file(ruleSetPtr, rulesFile, errorPtr);
@@ -121,6 +126,7 @@ export class ModSecurity {
      * @returns Transaction pointer
      */
     public newTransaction(modSecPtr: Buffer, ruleSetPtr: Buffer): Buffer {
+        ModSecurity.logger.debug('msc_new_transaction');
         const transactionPtr: Buffer = this.modSecurityLibrary.msc_new_transaction(modSecPtr, ruleSetPtr);
         if (isNull(transactionPtr)) {
             throw new Error('Failed to create transaction');
@@ -138,6 +144,7 @@ export class ModSecurity {
      * @param serverPort Server's port
      */
     public processConnection(transactionPtr: Buffer, clientIp: string, clientPort: number, serverIp: string, serverPort: number): void {
+        ModSecurity.logger.debug('msc_process_connection');
         if (this.modSecurityLibrary.msc_process_connection(transactionPtr, clientIp, clientPort, serverIp, serverPort) !== 1) {
             throw new ModSecurityError('msc_process_connection failed');
         }
@@ -152,6 +159,7 @@ export class ModSecurity {
      * @param httpVersion Http version (1.0, 1.2, 2.0).
      */
     public processUri(transactionPtr: Buffer, fullUrl: string, method: string, httpVersion: string): void {
+        ModSecurity.logger.debug('msc_process_uri');
         if (this.modSecurityLibrary.msc_process_uri(transactionPtr, fullUrl, method, httpVersion) !== 1) {
             throw new ModSecurityError('msc_process_uri failed');
         }
@@ -165,6 +173,7 @@ export class ModSecurity {
      * @param value Header value.
      */
     public addRequestHeader(transactionPtr: Buffer, key: string, value: string): void {
+        ModSecurity.logger.debug('msc_add_request_header');
         if (this.modSecurityLibrary.msc_add_request_header(transactionPtr, key, value) !== 1) {
             throw new ModSecurityError('msc_add_request_header failed');
         }
@@ -178,6 +187,7 @@ export class ModSecurity {
      * @param transactionPtr Transaction pointer.
      */
     public processRequestHeaders(transactionPtr: Buffer): void {
+        ModSecurity.logger.debug('msc_process_request_headers');
         if (this.modSecurityLibrary.msc_process_request_headers(transactionPtr) !== 1) {
             throw new ModSecurityError('msc_process_request_headers failed');
         }
@@ -195,6 +205,7 @@ export class ModSecurity {
      * @param body The request body (or chunk of the request body).
      */
     public appendRequestBody(transactionPtr: Buffer, body: string): void {
+        ModSecurity.logger.debug('msc_append_request_body');
         if (this.modSecurityLibrary.msc_append_request_body(transactionPtr, body, body.length) !== 1) {
             throw new ModSecurityError('msc_append_request_body failed');
         }
@@ -213,6 +224,7 @@ export class ModSecurity {
      * @param transactionPtr Transaction pointer.
      */
     public processRequestBody(transactionPtr: Buffer): void {
+        ModSecurity.logger.debug('msc_process_request_body');
         if (this.modSecurityLibrary.msc_process_request_body(transactionPtr) !== 1) {
             throw new ModSecurityError('msc_process_request_body failed');
         }
@@ -226,6 +238,7 @@ export class ModSecurity {
      * @param value Header value.
      */
     public addResponseHeader(transactionPtr: Buffer, key: string, value: string): void {
+        ModSecurity.logger.debug('msc_add_response_header');
         if (this.modSecurityLibrary.msc_add_response_header(transactionPtr, key, value) !== 1) {
             throw new ModSecurityError('msc_add_response_header failed');
         }
@@ -237,9 +250,9 @@ export class ModSecurity {
      * @param transactionPtr Transaction pointer.
      */
     public processResponseHeaders(transactionPtr: Buffer): void {
+        ModSecurity.logger.debug('msc_process_response_headers');
         if (this.modSecurityLibrary.msc_process_response_headers(transactionPtr) !== 1) {
             throw new ModSecurityError('msc_process_response_headers failed');
-
         }
     }
 
@@ -250,6 +263,7 @@ export class ModSecurity {
      * @param body The response body (or chunk of response body)
      */
     public appendResponseBody(transaction: Buffer, body: string): void {
+        ModSecurity.logger.debug('msc_append_response_body');
         if (this.modSecurityLibrary.msc_append_response_body(transaction, body, body.length) !== 1) {
             throw new ModSecurityError('msc_append_response_body failed');
         }
@@ -261,6 +275,7 @@ export class ModSecurity {
      * @param transactionPtr Transaction pointer.
      */
     public processResponseBody(transactionPtr: Buffer): void {
+        ModSecurity.logger.debug('msc_process_response_body');
         if (this.modSecurityLibrary.msc_process_response_body(transactionPtr) !== 1) {
             throw new ModSecurityError('msc_process_response_body failed');
         }
@@ -275,6 +290,7 @@ export class ModSecurity {
      * @param transactionPtr Transaction pointer.
      */
     public processLogging(transactionPtr: Buffer): void {
+        ModSecurity.logger.debug('msc_process_logging');
         if (this.modSecurityLibrary.msc_process_logging(transactionPtr) !== 1) {
             throw new ModSecurityError('msc_process_logging failed');
         }
@@ -286,6 +302,7 @@ export class ModSecurity {
      * @param transactionPtr Transaction pointer.
      */
     public transactionCleanup(transactionPtr: Buffer): void {
+        ModSecurity.logger.debug('msc_transaction_cleanup');
         if (this.modSecurityLibrary.msc_transaction_cleanup(transactionPtr) === 1) {
             throw new ModSecurityError('msc_transaction_cleanup failed');
         }
@@ -302,6 +319,7 @@ export class ModSecurity {
      * @returns true if an intervention is required, false if not.
      */
     public intervention(transactionPtr: Buffer, interventionPtr: Buffer): boolean {
+        ModSecurity.logger.debug('msc_intervention');
         return this.modSecurityLibrary.msc_intervention(transactionPtr, interventionPtr) === 1;
     }
 }
