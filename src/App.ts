@@ -154,11 +154,7 @@ export class App {
 			},
 			logLevel: 'silent',
 			changeOrigin: true,
-			onError: (err) => {
-				throw err;
-				console.error(err);
-				// res.status(500).send('Something went wrong');
-			},
+			ws: true,
 		} as Filter | Options);
 
 		// Request logging
