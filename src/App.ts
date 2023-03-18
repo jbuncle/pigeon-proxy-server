@@ -129,7 +129,12 @@ export class App {
 		const dockerMonitor: DockerMonitor = createDockerMonitor();
 
 		// Setup Docker Router
-		const dockerProxyRouter: DockerProxyRouter = new DockerProxyRouter();
+
+		const currentContainerId: string | undefined = process.env['CONTAINER_ID'];
+		if (currentContainerId) {
+			logger.info(`Current container ID: ${currentContainerId}`);
+		}
+		const dockerProxyRouter: DockerProxyRouter = new DockerProxyRouter(currentContainerId);
 		dockerProxyRouter.bind(dockerMonitor);
 
 

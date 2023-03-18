@@ -23,6 +23,7 @@ export class DockerProxyRouter extends AbstractProxyRouter {
     }
 
     public constructor(
+        private readonly currentContainerId: string | undefined
     ) {
         super();
     }
@@ -35,9 +36,26 @@ export class DockerProxyRouter extends AbstractProxyRouter {
     }
 
 
+    private suitableNetworkKeys: string[] = [];
     private async updateRoutes(inspectInfos: DockerInspectI[]) {
 
-        const routes = {};
+        const routes: Record<string, string> = {};
+
+        if (this.currentContainerId !== undefined) {
+            DockerProxyRouter.logger.debug(`Looking up current container: ${this.currentContainerId}`);
+
+            const currentContainerInfo: DockerInspectI | undefined = inspectInfos.find((inspectInfo: DockerInspectI) => {
+                console.log(inspectInfo.Id)
+                return inspectInfo.Id === this.currentContainerId;
+            });
+            if (currentContainerInfo === undefined) {
+                DockerProxyRouter.logger.warning(`Failed to find container info for current container ID '${this.currentContainerId}'`);
+            } else {
+                DockerProxyRouter.logger.debug(`Found current container: ${currentContainerInfo.Name}`);
+                this.suitableNetworkKeys = Object.keys(currentContainerInfo.NetworkSettings.Networks);
+                DockerProxyRouter.logger.debug(`Suitable docker networks: ${this.suitableNetworkKeys.join(', ')}`);
+            }
+        }
 
         for (const inspectInfo of inspectInfos) {
             const env = this.getEnv(inspectInfo);
@@ -49,7 +67,10 @@ export class DockerProxyRouter extends AbstractProxyRouter {
             const domains: string[] = env['VIRTUAL_HOST'].split(',');
 
             const targetPort: string = this.getNetworkPort(inspectInfo, env);
-            const ipAddress = this.getIp(inspectInfo);
+            const ipAddress: string | undefined = this.getIp(inspectInfo);
+            if (ipAddress === undefined) {
+                continue;
+            }
 
             // TODO: allow ssl to be set by container
             let protocol = 'http';
@@ -100,12 +121,16 @@ export class DockerProxyRouter extends AbstractProxyRouter {
 
     private getIp(inspectInfo: DockerInspectI): string | undefined {
         const networks = inspectInfo.NetworkSettings.Networks;
+        DockerProxyRouter.logger.debug(`Networks for container ${inspectInfo.Name}: ${Object.keys(networks).join(', ')}`);
+
         for (const networkKey in networks) {
-            // TODO: check if network is accessible (shared) with the currently running container
-            if (Object.prototype.hasOwnProperty.call(networks, networkKey)) {
-                const network = networks[networkKey];
-                return network.IPAddress;
+            if (this.suitableNetworkKeys === undefined || this.suitableNetworkKeys.indexOf(networkKey) >= 0) {
+                if (Object.prototype.hasOwnProperty.call(networks, networkKey)) {
+                    const network = networks[networkKey];
+                    return network.IPAddress;
+                }
             }
+
         }
         return undefined;
     }
