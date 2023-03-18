@@ -2,11 +2,12 @@
 /nbproject
 /node_modules
 /docker-compose.yml
+/.dockerignore
+/Dockerfile
 /.gitignore
 /package-lock.json
 /local-dev.sh
 /docker-compose.yml
 /resources
-# /src
-# /package.json
+/README.md
 # /tsconfig.json

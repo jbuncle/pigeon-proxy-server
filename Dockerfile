@@ -10,7 +10,7 @@ RUN wget https://github.com/jbuncle/modsecruity-rules/archive/main.tar.gz && \
     cd .. && \
     rm -rf modsecruity-rules-main
 
-FROM node:17-slim
+FROM node:17-slim as node-modsec
 
 # Install dependencies
 RUN apt-get update && \
@@ -28,19 +28,24 @@ RUN git clone --depth 1 -b v3/master --single-branch https://github.com/SpiderLa
     make install && \
     rm -rf /ModSecurity
 
-COPY --from=fetch-rules /usr/local/modsecurity-rules /usr/local/modsecurity-rules
+FROM node-modsec AS npm-install
 
 WORKDIR /app
 COPY . .
-
-
 
 ARG GITHUB_TOKEN
 
 RUN npm config set "@jbuncle:registry" "https://npm.pkg.github.com" && \
     npm config set //npm.pkg.github.com/:_authToken $GITHUB_TOKEN && \
     npm install && \
-    npm rebuild
+    npm rebuild && \
+    rm ~/.npmrc
+
+
+FROM node-modsec
+
+COPY --from=fetch-rules /usr/local/modsecurity-rules /usr/local/modsecurity-rules
+COPY --from=npm-install /app /app
 
 CMD [ "npm", "run", "start" ]
 VOLUME [ "/etc/letsencrypt" ]
