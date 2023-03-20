@@ -47,6 +47,7 @@ FROM node-modsec
 COPY --from=fetch-rules /usr/local/modsecurity-rules /usr/local/modsecurity-rules
 COPY --from=npm-install /app /app
 
+WORKDIR /app
 CMD [ "npm", "run", "start" ]
 VOLUME [ "/etc/letsencrypt" ]
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
