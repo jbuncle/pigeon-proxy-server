@@ -11,7 +11,7 @@
   "dependencies": {
     "@jbuncle/docker-api-js": "^1.2.2",
     "@jbuncle/letsencrypt-js": "^1.34.6",
-    "@jbuncle/logging-js": "^2.0.1",
+    "@jbuncle/logging-js": "^2.1.1",
     "compression": "^1.7.4",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
