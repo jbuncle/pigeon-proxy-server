@@ -1,4 +1,5 @@
 import { DockerInspectI } from '@jbuncle/docker-api-js';
+import { CertMonitorEvent, CertMonitorI } from '@jbuncle/letsencrypt-js';
 import { CertMonitorI } from '@jbuncle/letsencrypt-js';
 import compression from 'compression';
 import express from 'express';
@@ -9,6 +10,7 @@ import morgan from 'morgan';
 import { RequestCache } from './Caching/RequestCache';
 import { CertMonitorFactory, CertMonitorOptions } from './LetsEncrypt/CertMonitorFactory';
 import { LeDomainsProvider } from './LetsEncrypt/DockerDomainsProvider';
+import { ExpressChallengeHandler } from './LetsEncrypt/ExpressChallengeHandler';
 import { LetsEncryptUtils } from './LetsEncrypt/LetsEncryptUtil';
 import { InterventionError } from './ModSecurity/InterventionError';
 import { ModSecurityLoader } from './ModSecurity/ModSecurityLoader';
@@ -155,7 +157,11 @@ export class App {
 		modSecurityLoader.init();
 		const modSecurityMiddleware = modSecurityLoader.createMiddleware();
 
-		const certMonitor: CertMonitorI = (new CertMonitorFactory()).create(certOptions, staging, app);
+		const expressChallengeHandler: ExpressChallengeHandler = new ExpressChallengeHandler();
+		const certMonitor: CertMonitorI = (new CertMonitorFactory()).create(certOptions, staging, expressChallengeHandler, true, true);
+		certMonitor.on(undefined, (event: CertMonitorEvent, ...args: any) => {
+			logger.info(`CertMonitor Event '${event}'`, ...args);
+		});
 		// Watch for container changes and update
 		dockerMonitor.onChange((dockerInspects: DockerInspectI[]) => {
 			const leDomains: Record<string, string> = (new LeDomainsProvider()).getDomains(dockerInspects);
