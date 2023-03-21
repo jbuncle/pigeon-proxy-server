@@ -35,27 +35,11 @@ export class DockerProxyRouter extends AbstractProxyRouter {
         });
     }
 
-
-    private suitableNetworkKeys: string[] = [];
     private async updateRoutes(inspectInfos: DockerInspectI[]) {
 
         const routes: Record<string, string> = {};
 
-        if (this.currentContainerId !== undefined) {
-            DockerProxyRouter.logger.debug(`Looking up current container: ${this.currentContainerId}`);
-
-            const currentContainerInfo: DockerInspectI | undefined = inspectInfos.find((inspectInfo: DockerInspectI) => {
-                console.log(inspectInfo.Id)
-                return inspectInfo.Id === this.currentContainerId;
-            });
-            if (currentContainerInfo === undefined) {
-                DockerProxyRouter.logger.warning(`Failed to find container info for current container ID '${this.currentContainerId}'`);
-            } else {
-                DockerProxyRouter.logger.debug(`Found current container: ${currentContainerInfo.Name}`);
-                this.suitableNetworkKeys = Object.keys(currentContainerInfo.NetworkSettings.Networks);
-                DockerProxyRouter.logger.debug(`Suitable docker networks: ${this.suitableNetworkKeys.join(', ')}`);
-            }
-        }
+        const suitableNetworkKeys: string[] | undefined = this.getSuitableNetworks(inspectInfos);
 
         for (const inspectInfo of inspectInfos) {
             const env = this.getEnv(inspectInfo);
@@ -67,7 +51,7 @@ export class DockerProxyRouter extends AbstractProxyRouter {
             const domains: string[] = env['VIRTUAL_HOST'].split(',');
 
             const targetPort: string = this.getNetworkPort(inspectInfo, env);
-            const ipAddress: string | undefined = this.getIp(inspectInfo);
+            const ipAddress: string | undefined = this.getIp(inspectInfo, suitableNetworkKeys);
             if (ipAddress === undefined) {
                 continue;
             }
@@ -83,8 +67,29 @@ export class DockerProxyRouter extends AbstractProxyRouter {
         }
 
         this.routes = routes;
-        console.log('Updated docker routes', this.routes)
+        DockerProxyRouter.logger.notice('Updated docker routes', this.routes)
 
+    }
+
+    private getSuitableNetworks(inspectInfos: DockerInspectI[]): string[] | undefined {
+        if (this.currentContainerId !== undefined) {
+            DockerProxyRouter.logger.debug(`Looking up current container: ${this.currentContainerId}`);
+
+            const currentContainerInfo: DockerInspectI | undefined = inspectInfos.find((inspectInfo: DockerInspectI) => {
+                return inspectInfo.Id === this.currentContainerId;
+            });
+            if (currentContainerInfo === undefined) {
+                DockerProxyRouter.logger.warning(`Failed to find container info for current container ID '${this.currentContainerId}'`);
+            } else {
+                const suitableNetworkKeys: string[] = Object.keys(currentContainerInfo.NetworkSettings.Networks);
+                DockerProxyRouter.logger.notice(`Found current container: ${currentContainerInfo.Name} with networks '${suitableNetworkKeys}'`);
+                return suitableNetworkKeys;
+            }
+        } else {
+            DockerProxyRouter.logger.notice('No current container set');
+        }
+
+        return undefined;
     }
 
     private getNetworkPort(inspectInfo: DockerInspectI, env: Record<string, string>): string {
@@ -119,12 +124,12 @@ export class DockerProxyRouter extends AbstractProxyRouter {
     }
 
 
-    private getIp(inspectInfo: DockerInspectI): string | undefined {
+    private getIp(inspectInfo: DockerInspectI, suitableNetworkKeys: string[] | undefined): string | undefined {
         const networks = inspectInfo.NetworkSettings.Networks;
         DockerProxyRouter.logger.debug(`Networks for container ${inspectInfo.Name}: ${Object.keys(networks).join(', ')}`);
 
         for (const networkKey in networks) {
-            if (this.suitableNetworkKeys === undefined || this.suitableNetworkKeys.indexOf(networkKey) >= 0) {
+            if (suitableNetworkKeys === undefined || suitableNetworkKeys.indexOf(networkKey) >= 0) {
                 if (Object.prototype.hasOwnProperty.call(networks, networkKey)) {
                     const network = networks[networkKey];
                     return network.IPAddress;
