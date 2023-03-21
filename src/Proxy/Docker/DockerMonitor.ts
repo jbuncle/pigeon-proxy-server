@@ -1,4 +1,5 @@
 import { DockerContainerI, DockerContainers, DockerEventOptionsI, DockerEvents, DockerInspect, DockerInspectI, DockerSocket } from "@jbuncle/docker-api-js";
+import { Logger, LoggerInterface } from "@jbuncle/logging-js";
 import EventEmitter from "events";
 
 
@@ -12,6 +13,8 @@ export function createDockerMonitor(): DockerMonitor {
 }
 
 export class DockerMonitor {
+
+    private static logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${DockerMonitor.name}`);
 
     private readonly containers: Record<string, DockerInspectI> = {};
 
@@ -27,7 +30,7 @@ export class DockerMonitor {
 
     public start() {
         if (this.isStarted) {
-            console.warn('Already started');
+            DockerMonitor.logger.warning('Already started');
         }
         this.isStarted = true;
         this.bindToDocker();
@@ -102,13 +105,13 @@ export class DockerMonitor {
 
 
     private add(containerId: string, inspect: DockerInspectI): void {
-        console.log('Started/existing container', containerId);
+        DockerMonitor.logger.notice(`Found container '${containerId}'`);
         this.containers[containerId] = Object.freeze(inspect);
         this.eventEmitter.emit(DockerMonitor.EVENT_CHANGE, this.getRunningContainers());
     }
 
     private remove(containerId: string) {
-        console.log('Stopped container', containerId);
+        DockerMonitor.logger.notice(`Container stopped '${containerId}'`);
         delete this.containers[containerId];
         this.eventEmitter.emit(DockerMonitor.EVENT_CHANGE, this.getRunningContainers());
     }

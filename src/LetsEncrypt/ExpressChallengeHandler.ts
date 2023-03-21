@@ -1,8 +1,17 @@
 import type { AuthorizationI, ChallengeHandlerI, ChallengeI } from "@jbuncle/letsencrypt-js";
-import { Request, Response } from "express";
-import express from 'express';
+import { Logger, LoggerInterface } from "@jbuncle/logging-js";
+import { NextFunction, Request, Response } from "express";
 
+/**
+ * Express Middleware for Handling Challenge Token.
+ */
 export class ExpressChallengeHandler implements ChallengeHandlerI {
+
+    private static logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${ExpressChallengeHandler.name}`);
+
+    private static readonly CHALLENGE_PATH = '/.well-known/acme-challenge/';
+
+    private readonly challengeTokens: Record<string, string> = {};
 
     public getTypes(): string[] {
         return ['http-01'];
@@ -13,32 +22,26 @@ export class ExpressChallengeHandler implements ChallengeHandlerI {
         const token: string = challenge.token;
 
         this.challengeTokens[token] = keyAuthorization;
-        console.log('Added challenge token', token);
-
+        ExpressChallengeHandler.logger.info(`Added challenge token '${token}'`);
 
         return true;
     }
 
-    private static readonly CHALLENGE_PATH = '/.well-known/acme-challenge/';
 
     public async remove(authz: AuthorizationI, challenge: ChallengeI): Promise<boolean> {
         const token = challenge.token;
 
         delete this.challengeTokens[token];
-        console.log('Removed challenge token', token);
+        ExpressChallengeHandler.logger.info(`Removed challenge token '${token}'`);
 
         return true;
     }
 
-    private readonly challengeTokens: Record<string, string> = {};
 
-    public bind(express: express.Application) {
-        express.use(this.createExpressHandler());
-    }
-
-    private createExpressHandler(): (req: Request, res: Response, next: express.NextFunction) => void {
-        return (req, res, next) => {
-            if (!req.path.startsWith(ExpressChallengeHandler.CHALLENGE_PATH)) {
+    public createExpressHandler(): (req: Request, res: Response, next: NextFunction) => void {
+        return (req: Request, res: Response, next: NextFunction): void => {
+            const requestPath: string = req.path;
+            if (!requestPath.startsWith(ExpressChallengeHandler.CHALLENGE_PATH)) {
                 next();
                 return;
             }
@@ -46,11 +49,11 @@ export class ExpressChallengeHandler implements ChallengeHandlerI {
 
             const challengeToken: string = req.path.substring(ExpressChallengeHandler.CHALLENGE_PATH.length);
             if (!Object.prototype.hasOwnProperty.call(this.challengeTokens, challengeToken)) {
-                console.warn('Missing requested challenge token', challengeToken);
+                ExpressChallengeHandler.logger.warning('Missing requested challenge token', challengeToken);
                 next();
                 return;
             }
-            console.log('Handling challenge request', challengeToken);
+            ExpressChallengeHandler.logger.notice('Handling challenge request', challengeToken);
             // Send challenge response
             res.status(200).send(this.challengeTokens[challengeToken]);
         };

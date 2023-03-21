@@ -1,3 +1,4 @@
+import { Logger, LoggerInterface } from '@jbuncle/logging-js';
 import path from "path";
 import { SecureContext, SecureContextOptions, createSecureContext } from "tls";
 import { format } from "util";
@@ -5,6 +6,8 @@ import * as fs from "fs";
 
 
 export class SNICallbackFactory {
+
+	private static logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${SNICallbackFactory.name}`);
 
 	public constructor(
 		private readonly keyFilePattern: string,
@@ -24,20 +27,20 @@ export class SNICallbackFactory {
 
 			// Generate certificate object dynamically based on the hostname
 			try {
+				SNICallbackFactory.logger.debug(`Fetching key '${keyPath}' and cert '${certPath}'`);
 				const [key, cert] = await Promise.all([
 					fs.promises.readFile(keyPath),
 					fs.promises.readFile(certPath)
 				]);
 
-				console.log('fetching', keyPath, certPath);
-				const certificate: SecureContextOptions = {
+				const secureContextOptions: SecureContextOptions = {
 					key,
 					cert
 				};
-				const secureContext: SecureContext = createSecureContext(certificate);
+				const secureContext: SecureContext = createSecureContext(secureContextOptions);
 				callback(null, secureContext);
 			} catch (e) {
-				console.error(e);
+				SNICallbackFactory.logger.warning(`Error when looking up SSL Certificate for '${hostname}': ${e}`);
 				callback(e, null);
 			}
 		};

@@ -33,7 +33,7 @@ export class RequestCache {
                 // Fetch data from response
                 const cached: FetchedResponse | undefined = await this.fsRequestCache.fetch(uri);
                 if (cached !== undefined) {
-                    RequestCache.logger.debug('Returning response from cache');
+                    RequestCache.logger.debug(`Returning response from cache for '${uri}'`);
                     cached.headers['x-cache-status'] = 'HIT';
                     res.set(cached.headers);
                     res.send(cached.data);

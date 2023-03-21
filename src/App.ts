@@ -1,6 +1,6 @@
 import { DockerInspectI } from '@jbuncle/docker-api-js';
 import { CertMonitorEvent, CertMonitorI } from '@jbuncle/letsencrypt-js';
-import { CertMonitorI } from '@jbuncle/letsencrypt-js';
+import { Logger, LoggerInterface } from '@jbuncle/logging-js';
 import compression from 'compression';
 import express from 'express';
 import http, { Server as HttpServer, IncomingMessage, ServerResponse } from 'http';
@@ -21,8 +21,8 @@ import { DockerProxyRouter } from './Proxy/Docker/DockerProxyRouter';
 import { FileRoutesRouter } from './Proxy/FileRoutesRouter';
 import { ProxyRouterI } from './Proxy/ProxyRouterI';
 import { SNICallbackFactory } from './Utils/SNICallbackFactory';
-import { ConsoleLoggerFactory, LogLevel, Logger, LoggerInterface } from '@jbuncle/logging-js';
 
+const logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/app`);
 
 /**
  * Get error message for HTTP status code.
@@ -157,6 +157,7 @@ export class App {
 		modSecurityLoader.init();
 		const modSecurityMiddleware = modSecurityLoader.createMiddleware();
 
+
 		const expressChallengeHandler: ExpressChallengeHandler = new ExpressChallengeHandler();
 		const certMonitor: CertMonitorI = (new CertMonitorFactory()).create(certOptions, staging, expressChallengeHandler, true, true);
 		certMonitor.on(undefined, (event: CertMonitorEvent, ...args: any) => {
@@ -165,6 +166,7 @@ export class App {
 		// Watch for container changes and update
 		dockerMonitor.onChange((dockerInspects: DockerInspectI[]) => {
 			const leDomains: Record<string, string> = (new LeDomainsProvider()).getDomains(dockerInspects);
+			logger.info(`Docker/LetEncrypt Domains`, leDomains);
 			certMonitor.set(leDomains);
 		});
 
@@ -193,6 +195,9 @@ export class App {
 		// Setup compression
 		app.use(compression());
 
+		// Setup LetsEncrypt Challenge handling for express
+		app.use(expressChallengeHandler.createExpressHandler());
+
 		// Setup proxying
 		app.use(proxyMiddleware);
 
@@ -204,12 +209,16 @@ export class App {
 
 		// Start up everything
 		// Start monitoring letsencrypt certs
+		logger.debug('Starting Certificate Monitor');
 		certMonitor.start(1440);
 
 		// Start monitoring docker containers
+		logger.debug('Starting docker monitor');
 		dockerMonitor.start();
 
+		logger.debug('Starting HTTP Server');
 		insecureServer.listen(8080);
+		logger.debug('Starting. HTTPS Server');
 		secureServer.listen(8443);
 	}
 
