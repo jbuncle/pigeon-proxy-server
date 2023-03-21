@@ -90,13 +90,25 @@ export class App {
 		return options;
 	}
 
+	private static getMode(args: Record<string, string>): string {
+
+		if (args.mode !== undefined) {
+			return args.mode;
+		}
+
+		if (process.env['MODE']) {
+			return process.env['MODE'];
+		}
+		return 'development';
+	}
+
 	public static async main() {
 		const logger: LoggerInterface = Logger.getLogger(`@jbuncle/pigeon-proxy-server/${App.name}`);
 		logger.debug('Starting...');
 
 		const args: Record<string, string> = App.getArgs();
 
-		const staging: boolean = (args.stage) ? args.stage !== 'production' : true;
+		const staging: boolean = this.getMode(args) !== 'production';
 		const modSecurityLib: string | undefined = (args.modSecurityLib) ? args.modSecurityLib : findModSec();
 		const modSecurityRules: string = (args.modSecurityRules) ? args.modSecurityRules : '/usr/local/modsecurity-rules/main.conf';
 

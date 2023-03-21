@@ -2,7 +2,7 @@
 
 ![Pigeon](./resources/delivery-pigeon-small.png)
 
-Pigeon Proxy Server is an all-in-one solution that efficiently proxies requests to multiple targets with built-in integrations for Docker, ModSecurity, and LetsEncrypt. 
+Pigeon Proxy Server is an all-in-one solution that efficiently proxies requests to multiple targets with built-in integrations for Docker, ModSecurity, and LetsEncrypt.
 
 Written in TypeScript, it uses the Express.js server and adds middleware (both pre-existing and custom) to create the complete solution.
 
@@ -32,7 +32,7 @@ It's designed to replace a setup of `nginx` (with Caching and ModSecurity), `ngi
 
 The recommended way to run the server is to use the included bash script to run it in a Docker container. To do this, run `./local-dev build-run`.
 
-As this project uses GitHub Packages you will need to define the `GITHUB_TOKEN` variable with a `read:packages` personal access token from GitHub. 
+As this project uses GitHub Packages you will need to define the `GITHUB_TOKEN` variable with a `read:packages` personal access token from GitHub.
 
 ### Development
 
@@ -44,13 +44,23 @@ Once you have `libModSecurity` installed, run `npm run start` to start the serve
 
 The following options are available when running the server:
 
+#### CLI Args
+
 | Option           | Default                                | Description                                                                            |
 | ---------------- | -------------------------------------- | -------------------------------------------------------------------------------------- |
-| staging          | true                                   | Whether the environment is a staging one. This is currently only used for LetsEncrypt. |
+| mode             | development                            | Whether the environment is a staging one. This is currently only used for LetsEncrypt. |
 | modSecurityLib   | *attempts to locate*                   | Path to the libmodsecurity.so library. Defaults to automatically trying to find it.    |
 | modSecurityRules | /usr/local/modsecurity-rules/main.conf | Path to the ModSecurity rules file.                                                    |
 | leAccountsDir    | /etc/letsencrypt/accounts              | The directory where LetsEncrypt accounts are stored.                                   |
 | leCertDir        | /etc/letsencrypt/live                  | The directory where LetsEncrypt certificates are stored.                               |
 | fixedRoutesFile  |                                        | (Optional) Path to a JSON file defining static/fixed routes                            |
+
+#### Environment Variables
+
+| Option           | Default                                | Description                                                                            |
+| ---------------- | -------------------------------------- | -------------------------------------------------------------------------------------- |
+| MODE             | development                            | Whether the environment is a staging one. This is currently only used for LetsEncrypt. |
+
+---
 
 Note: This project is still in development.
