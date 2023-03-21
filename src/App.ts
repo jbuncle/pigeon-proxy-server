@@ -179,7 +179,7 @@ export class App {
 				return result;
 			},
 			logLevel: 'silent',
-			changeOrigin: true,
+			changeOrigin: false,
 			ws: true,
 		} as Filter | Options);
 
