@@ -25,8 +25,8 @@ jobs:
           registry-url: https://npm.pkg.github.com
           scope: '@jbuncle'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies without native build scripts
+        run: npm install --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
